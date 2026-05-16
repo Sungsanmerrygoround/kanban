@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kanban Board</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- Sidebar -->
+<aside class="sidebar">
+  <div class="sidebar-header">
+    <div class="logo-mark">⚡</div>
+    <div class="workspace-name">Board</div>
+  </div>
+  <div class="sidebar-divider"></div>
+  <div class="section-title">프로젝트</div>
+  <div class="project-list" id="projectList"></div>
+  <div class="user-chip" id="userChip">
+    <div class="user-email"></div>
+    <button class="user-logout" id="authLogout" title="로그아웃">⎋</button>
+  </div>
+  <button class="add-project-btn" id="addProjectBtn">
+    <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+      <path d="M12 5v14M5 12h14"/>
+    </svg>
+    새 프로젝트
+  </button>
+</aside>
+
+<!-- Main area -->
+<div class="main">
+  <nav class="navbar">
+    <div class="project-title">
+      <span class="project-title-icon" id="projectTitleIcon">🚀</span>
+      <span class="project-title-name" id="projectTitleName">제품 개발</span>
+    </div>
+    <div class="divider"></div>
+    <div class="search-wrap">
+      <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+      </svg>
+      <input class="search-input" id="searchInput" type="text" placeholder="카드 검색..." />
+    </div>
+    <div class="nav-right">
+      <button class="btn btn-primary" id="addColNavBtn">
+        <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+          <path d="M12 5v14M5 12h14"/>
+        </svg>
+        컬럼 추가
+      </button>
+    </div>
+  </nav>
+
+  <div class="board" id="board"></div>
+</div>
+
+<!-- Auth overlay (shown when logged out) -->
+<div class="auth-overlay" id="authOverlay">
+  <div class="auth-card">
+    <div class="auth-logo">⚡</div>
+    <div class="auth-title">Kanban Board</div>
+    <div class="auth-sub">이메일로 로그인하거나 가입하세요</div>
+    <input class="auth-input" id="authEmail" type="email" placeholder="이메일" autocomplete="email" />
+    <input class="auth-input" id="authPassword" type="password" placeholder="비밀번호 (6자 이상)" autocomplete="current-password" />
+    <div class="auth-actions">
+      <button class="btn btn-primary" id="authSignIn">로그인</button>
+      <button class="btn" id="authSignUp">가입</button>
+    </div>
+    <div class="auth-msg" id="authMsg"></div>
+  </div>
+</div>
+
+<!-- Card edit modal -->
+<div class="overlay" id="overlay">
+  <div class="modal" id="modal">
+    <div class="modal-head">
+      <div class="modal-headline">카드 편집</div>
+      <button class="modal-x" id="modalClose">✕</button>
+    </div>
+
+    <div class="field">
+      <label class="field-label">제목</label>
+      <input class="field-input" id="mTitle" type="text" placeholder="카드 제목..." />
+    </div>
+
+    <div class="field">
+      <label class="field-label">설명 (선택)</label>
+      <textarea class="field-input" id="mDesc" placeholder="세부 내용을 입력하세요..."></textarea>
+    </div>
+
+    <div class="field">
+      <label class="field-label">우선순위</label>
+      <div class="priority-row">
+        <button class="pri-pill" data-p="high">🔴 높음</button>
+        <button class="pri-pill" data-p="medium">🟡 중간</button>
+        <button class="pri-pill" data-p="low">🟢 낮음</button>
+        <button class="pri-pill" data-p="none">— 없음</button>
+      </div>
+    </div>
+
+    <div class="field" style="display:flex; gap:0.75rem;">
+      <div style="flex:1;">
+        <label class="field-label">컬럼</label>
+        <select class="col-select" id="mColSelect"></select>
+      </div>
+      <div style="flex:1;">
+        <label class="field-label">마감일</label>
+        <input type="date" class="field-input" id="mDue" />
+      </div>
+    </div>
+
+    <div class="field">
+      <label class="field-label">태그 (Enter로 추가)</label>
+      <div class="tags-box" id="tagsBox">
+        <input class="tags-text" id="tagsText" placeholder="태그 입력..." />
+      </div>
+    </div>
+
+    <div class="modal-foot">
+      <button class="btn-danger" id="mDelete">카드 삭제</button>
+      <button class="btn-save" id="mSave">저장</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
