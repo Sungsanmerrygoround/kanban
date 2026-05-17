@@ -1,11 +1,14 @@
-// Application entry point — wires global events, gates load on auth.
+// Application entry point — wires global events, gates load on auth,
+// subscribes to Firestore for real-time updates.
 
-import { load, filter, setUser } from './state.js';
+import { load, save, applyRemote, filter, setUser } from './state.js';
 import { refreshAll } from './refresh.js';
 import { addProject } from './sidebar.js';
 import { addColumn, renderBoard } from './board.js';
 import { initModal, closeModal } from './modal.js';
+import { initArchive, closeArchive } from './archive.js';
 import { initAuth, onUserChange } from './auth.js';
+import { subscribeUserState } from './sync.js';
 
 // ── Wire global events ──────────────────────────────────────────────────────
 document.getElementById('addColNavBtn').addEventListener('click', addColumn);
@@ -17,21 +20,46 @@ document.getElementById('searchInput').addEventListener('input', e => {
 });
 
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') closeModal();
+  if (e.key === 'Escape') { closeModal(); closeArchive(); }
 });
 
 initModal();
+initArchive();
 initAuth();
 
-// ── Auth-gated init ─────────────────────────────────────────────────────────
-onUserChange(async (user) => {
+// ── Register service worker (PWA / offline) ─────────────────────────────────
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js')
+      .catch((err) => console.warn('SW registration failed:', err));
+  });
+}
+
+// ── Auth-gated init + live sync ─────────────────────────────────────────────
+let unsubscribe = null;
+
+onUserChange((user) => {
+  // Tear down any previous subscription on logout / user-switch.
+  if (unsubscribe) { unsubscribe(); unsubscribe = null; }
+
   if (user) {
     setUser(user.uid);
-    await load();
+    // Show whatever we have locally immediately for snappy UI.
+    load();
     refreshAll();
+
+    // Subscribe to remote changes. The first snapshot also delivers current
+    // cloud state, which overrides local if it's newer / different.
+    unsubscribe = subscribeUserState(user.uid, ({ empty, data }) => {
+      if (empty) {
+        // No doc yet — push our current state up so other devices can pull it.
+        save();
+        return;
+      }
+      if (applyRemote(data)) refreshAll();
+    });
   } else {
     setUser(null);
-    // Clear the board behind the auth overlay
     document.getElementById('board').innerHTML = '';
     document.getElementById('projectList').innerHTML = '';
   }

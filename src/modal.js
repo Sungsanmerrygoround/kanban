@@ -1,6 +1,6 @@
-// Card edit modal: open, render priority/tags, save, delete.
+// Card edit modal: open, render priority/tags/checklist, save, archive, delete.
 
-import { state, save, findCard, getColById, activeColumns, tagColor } from './state.js';
+import { save, findCard, getColById, activeColumns, tagColor } from './state.js';
 import { escHtml } from './utils.js';
 import { refreshAll } from './refresh.js';
 
@@ -10,6 +10,7 @@ const m = {
   colId: null,
   priority: 'none',
   tags: [],
+  checklist: [],
 };
 
 // ── Open / close ────────────────────────────────────────────────────────────
@@ -22,6 +23,7 @@ export function openModal(cardId) {
   m.colId = col.id;
   m.priority = card.priority;
   m.tags = [...card.tags];
+  m.checklist = (card.checklist || []).map(i => ({ text: i.text, done: !!i.done }));
 
   document.getElementById('mTitle').value = card.title;
   document.getElementById('mDesc').value  = card.desc || '';
@@ -34,6 +36,7 @@ export function openModal(cardId) {
 
   renderPriorityPills();
   renderTagPills();
+  renderChecklist();
 
   document.getElementById('overlay').classList.add('open');
   document.getElementById('mTitle').focus();
@@ -45,7 +48,7 @@ export function closeModal() {
   m.colId  = null;
 }
 
-// ── Save / delete ───────────────────────────────────────────────────────────
+// ── Save / archive / delete ─────────────────────────────────────────────────
 function saveModal() {
   if (!m.cardId) return;
   const result = findCard(m.cardId);
@@ -57,11 +60,12 @@ function saveModal() {
   const newColId = document.getElementById('mColSelect').value;
   const { card, col: srcCol } = result;
 
-  card.title    = title;
-  card.desc     = document.getElementById('mDesc').value.trim();
-  card.priority = m.priority;
-  card.tags     = [...m.tags];
-  card.due      = document.getElementById('mDue').value || '';
+  card.title     = title;
+  card.desc      = document.getElementById('mDesc').value.trim();
+  card.priority  = m.priority;
+  card.tags      = [...m.tags];
+  card.due       = document.getElementById('mDue').value || '';
+  card.checklist = m.checklist.map(i => ({ text: i.text, done: !!i.done }));
 
   // Move column if changed
   if (newColId !== srcCol.id) {
@@ -74,9 +78,20 @@ function saveModal() {
   closeModal();
 }
 
+function archiveCard() {
+  if (!m.cardId) return;
+  const result = findCard(m.cardId);
+  if (!result) return;
+  result.card.archived  = true;
+  result.card.archivedAt = new Date().toISOString();
+  save();
+  refreshAll();
+  closeModal();
+}
+
 function deleteCard() {
   if (!m.cardId) return;
-  if (!confirm('이 카드를 삭제할까요?')) return;
+  if (!confirm('이 카드를 완전히 삭제할까요? (아카이브로 보내려면 "아카이브" 버튼을 쓰세요)')) return;
   const { col } = findCard(m.cardId);
   col.cards = col.cards.filter(c => c.id !== m.cardId);
   save();
@@ -110,9 +125,43 @@ function renderTagPills() {
   txt.value = '';
 }
 
+// ── Checklist ───────────────────────────────────────────────────────────────
+function renderChecklist() {
+  const list = document.getElementById('checklistList');
+  list.innerHTML = '';
+  m.checklist.forEach((item, i) => {
+    const row = document.createElement('div');
+    row.className = 'checklist-row' + (item.done ? ' done' : '');
+    row.innerHTML = `
+      <input type="checkbox" class="checklist-check" ${item.done ? 'checked' : ''} />
+      <input type="text" class="checklist-text" value="${escHtml(item.text)}" />
+      <button class="checklist-del" title="삭제">×</button>
+    `;
+    row.querySelector('.checklist-check').addEventListener('change', e => {
+      m.checklist[i].done = e.target.checked;
+      renderChecklist();
+    });
+    row.querySelector('.checklist-text').addEventListener('input', e => {
+      m.checklist[i].text = e.target.value;
+    });
+    row.querySelector('.checklist-text').addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        document.getElementById('checklistInput').focus();
+      }
+    });
+    row.querySelector('.checklist-del').addEventListener('click', () => {
+      m.checklist.splice(i, 1);
+      renderChecklist();
+    });
+    list.appendChild(row);
+  });
+}
+
 // ── Wiring (called once at startup by main.js) ──────────────────────────────
 export function initModal() {
   document.getElementById('mSave').addEventListener('click', saveModal);
+  document.getElementById('mArchive').addEventListener('click', archiveCard);
   document.getElementById('mDelete').addEventListener('click', deleteCard);
   document.getElementById('modalClose').addEventListener('click', closeModal);
 
@@ -141,6 +190,17 @@ export function initModal() {
     } else if (e.key === 'Backspace' && !e.target.value && m.tags.length) {
       m.tags.pop();
       renderTagPills();
+    }
+  });
+
+  document.getElementById('checklistInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      const v = e.target.value.trim();
+      if (!v) return;
+      e.preventDefault();
+      m.checklist.push({ text: v, done: false });
+      e.target.value = '';
+      renderChecklist();
     }
   });
 }

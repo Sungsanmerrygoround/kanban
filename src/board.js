@@ -31,7 +31,8 @@ function buildColumn(col) {
   el.className = 'column';
   el.dataset.colId = col.id;
 
-  const visibleCards = col.cards.filter(matchesSearch);
+  const liveCards = col.cards.filter(c => !c.archived);
+  const visibleCards = liveCards.filter(matchesSearch);
 
   // Header
   const hdr = document.createElement('div');
@@ -41,7 +42,7 @@ function buildColumn(col) {
     <div class="col-title-wrap">
       <div class="col-title" data-col-id="${col.id}">${escHtml(col.title)}</div>
     </div>
-    <div class="col-badge">${col.cards.length}</div>
+    <div class="col-badge">${liveCards.length}</div>
     <button class="col-delete" data-col-id="${col.id}" title="컬럼 삭제">×</button>
   `;
   el.appendChild(hdr);

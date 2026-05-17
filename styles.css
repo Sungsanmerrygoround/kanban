@@ -990,3 +990,201 @@ textarea.field-input { resize: vertical; min-height: 80px; line-height: 1.5; }
   color: #c0392b;
   background: rgba(192, 57, 43, 0.08);
 }
+
+/* ── Pointer-based drag & drop ──────────────────────────────────────────── */
+.card { touch-action: pan-y; user-select: none; -webkit-user-select: none; }
+.card.dragging { opacity: 0.35; }
+
+.drag-ghost {
+  position: fixed;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  z-index: 9999;
+  transform: rotate(2deg);
+  box-shadow: 0 18px 40px rgba(15, 30, 22, 0.25);
+  opacity: 0.95;
+}
+
+body.dragging-active {
+  cursor: grabbing;
+  touch-action: none;
+  overflow: hidden;
+}
+body.dragging-active .card { cursor: grabbing; }
+
+/* ── PWA safe-area insets (iPhone notch / home indicator) ────────────────── */
+@supports (padding: env(safe-area-inset-top)) {
+  .sidebar {
+    padding-top: calc(1.5rem + env(safe-area-inset-top));
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+    padding-left: env(safe-area-inset-left);
+  }
+  .navbar {
+    padding-top: calc(0.75rem + env(safe-area-inset-top));
+    padding-right: calc(1.25rem + env(safe-area-inset-right));
+  }
+  .board {
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-right: env(safe-area-inset-right);
+  }
+}
+
+/* When installed as a standalone PWA, hide any browser-only affordances. */
+@media (display-mode: standalone) {
+  body { overscroll-behavior: none; }
+}
+
+/* ── Checklist (modal) ───────────────────────────────────────────────────── */
+.checklist-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 0.5rem;
+}
+.checklist-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.5rem;
+  background: #f6faf7;
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+}
+.checklist-row.done .checklist-text {
+  text-decoration: line-through;
+  color: #8a9b91;
+}
+.checklist-check {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.checklist-text {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font: inherit;
+  color: var(--card-text);
+  padding: 0.15rem 0;
+  outline: none;
+}
+.checklist-del {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: #8a9b91;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0 0.25rem;
+  border-radius: 4px;
+}
+.checklist-del:hover {
+  background: rgba(192, 57, 43, 0.1);
+  color: #c0392b;
+}
+.checklist-input {
+  font-size: 0.85rem;
+}
+
+/* ── Checklist badge (on card preview) ───────────────────────────────────── */
+.checklist-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.15rem 0.5rem;
+  background: rgba(16, 163, 127, 0.1);
+  color: var(--accent-strong);
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+.checklist-badge svg { width: 11px; height: 11px; }
+.checklist-badge.done {
+  background: rgba(16, 163, 127, 0.22);
+  color: var(--accent-strong);
+}
+
+/* ── Archive button (modal footer) ───────────────────────────────────────── */
+.btn-archive {
+  padding: 0.55rem 0.9rem;
+  background: #fff7e6;
+  color: #b87800;
+  border: 1px solid #f3d68a;
+  border-radius: 8px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  margin-right: auto;
+}
+.btn-archive:hover { background: #ffeec9; }
+
+/* ── Archive overlay ─────────────────────────────────────────────────────── */
+.archive-modal { max-width: 520px; }
+.archive-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.archive-empty {
+  padding: 2rem 0;
+  text-align: center;
+  color: #8a9b91;
+  font-size: 0.9rem;
+}
+.archive-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.75rem;
+  background: #f6faf7;
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+}
+.archive-item-main {
+  flex: 1;
+  min-width: 0;
+}
+.archive-item-title {
+  font-weight: 600;
+  color: var(--card-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.archive-item-meta {
+  font-size: 0.75rem;
+  color: #6b7d72;
+  margin-top: 0.15rem;
+}
+.archive-restore {
+  padding: 0.35rem 0.75rem;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 7px;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.archive-restore:hover { background: var(--accent-strong); }
+.archive-delete {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: #8a9b91;
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0 0.35rem;
+  border-radius: 5px;
+}
+.archive-delete:hover {
+  background: rgba(192, 57, 43, 0.1);
+  color: #c0392b;
+}

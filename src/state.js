@@ -1,6 +1,10 @@
 // Application state, persistence, sample data, and lookup helpers.
 
-import { fetchUserState, writeUserState } from './sync.js';
+import { writeUserState } from './sync.js';
+
+// Unique per browser tab — used to ignore our own snapshot echoes.
+export const clientId = (crypto.randomUUID && crypto.randomUUID()) ||
+  ('c-' + Math.random().toString(36).slice(2) + Date.now().toString(36));
 
 const V = 'kb6';
 const KEY_STATE = `${V}_state`;
@@ -154,30 +158,30 @@ export function save() {
       state,
       tagColorMap,
       tagIdx,
+      writerId: clientId,
     }).catch(err => console.error('Cloud save failed:', err));
   }, 500);
 }
 
-// Public load: tries Firestore for the current user, falls back to local.
-export async function load() {
-  if (currentUid) {
-    try {
-      const remote = await fetchUserState(currentUid);
-      if (remote && remote.state) {
-        state = remote.state;
-        Object.keys(tagColorMap).forEach(k => delete tagColorMap[k]);
-        Object.assign(tagColorMap, remote.tagColorMap || {});
-        tagIdx = remote.tagIdx || 0;
-        applyShapeGuards();
-        saveLocal();
-        return;
-      }
-    } catch (err) {
-      console.warn('Cloud load failed, using local:', err);
-    }
-  }
+// Synchronous load from localStorage — cloud sync arrives via subscription.
+export function load() {
   loadLocal();
   applyShapeGuards();
+}
+
+// Apply a snapshot received from Firestore. Ignores echoes of our own writes.
+// Returns true if state actually changed.
+export function applyRemote(data) {
+  if (!data || !data.state) return false;
+  if (data.writerId === clientId) return false; // our own echo
+
+  state = data.state;
+  Object.keys(tagColorMap).forEach(k => delete tagColorMap[k]);
+  Object.assign(tagColorMap, data.tagColorMap || {});
+  tagIdx = data.tagIdx || 0;
+  applyShapeGuards();
+  saveLocal();
+  return true;
 }
 
 // ── Tag colors ──────────────────────────────────────────────────────────────
