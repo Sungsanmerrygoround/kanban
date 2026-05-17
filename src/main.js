@@ -26,6 +26,33 @@ document.addEventListener('keydown', e => {
 initModal();
 initArchive();
 initAuth();
+initSidebarToggle();
+
+// ── Sidebar collapse toggle ─────────────────────────────────────────────────
+function initSidebarToggle() {
+  const KEY = 'kb_sidebar_collapsed';
+  const isMobile = () => window.matchMedia('(max-width: 768px)').matches;
+
+  // Initial state: respect stored pref on desktop; default collapsed on mobile.
+  const stored = localStorage.getItem(KEY);
+  const initialCollapsed = stored === null ? isMobile() : stored === '1';
+  document.body.classList.toggle('sidebar-collapsed', initialCollapsed);
+
+  const apply = (collapsed) => {
+    document.body.classList.toggle('sidebar-collapsed', collapsed);
+    localStorage.setItem(KEY, collapsed ? '1' : '0');
+  };
+
+  document.getElementById('sidebarToggle').addEventListener('click', () => {
+    apply(!document.body.classList.contains('sidebar-collapsed'));
+  });
+  document.getElementById('sidebarBackdrop').addEventListener('click', () => apply(true));
+
+  // On mobile, picking a project should auto-close the sidebar.
+  document.getElementById('projectList').addEventListener('click', (e) => {
+    if (isMobile() && e.target.closest('.project-item')) apply(true);
+  });
+}
 
 // ── Register service worker (PWA / offline) ─────────────────────────────────
 if ('serviceWorker' in navigator) {
