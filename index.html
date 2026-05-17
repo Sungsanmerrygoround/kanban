@@ -16,6 +16,11 @@
 </head>
 <body>
 
+<!-- Floating button to reopen sidebar when collapsed -->
+<button class="sidebar-open-btn" id="sidebarOpenBtn" title="사이드바 열기" aria-label="사이드바 열기">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+</button>
+
 <!-- Sidebar backdrop (mobile) -->
 <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
 
@@ -24,6 +29,9 @@
   <div class="sidebar-header">
     <div class="logo-mark">⚡</div>
     <div class="workspace-name">Board</div>
+    <button class="sidebar-toggle" id="sidebarToggle" title="사이드바 접기" aria-label="사이드바 접기">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+    </button>
   </div>
   <div class="sidebar-divider"></div>
   <div class="section-title">프로젝트</div>
@@ -43,9 +51,6 @@
 <!-- Main area -->
 <div class="main">
   <nav class="navbar">
-    <button class="sidebar-toggle" id="sidebarToggle" title="사이드바 토글" aria-label="사이드바 토글">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-    </button>
     <div class="project-title">
       <span class="project-title-icon" id="projectTitleIcon">🚀</span>
       <span class="project-title-name" id="projectTitleName">제품 개발</span>

@@ -1243,3 +1243,55 @@ body.sidebar-collapsed .sidebar {
   }
   body:not(.sidebar-collapsed) .sidebar-backdrop { display: block; }
 }
+
+/* ── Sidebar toggle button (inside sidebar header) ───────────────────────── */
+.sidebar-header { gap: 0.55rem; }
+.sidebar-header .workspace-name { flex: 1; }
+.sidebar-header .sidebar-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: var(--muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  margin-right: 0;
+}
+.sidebar-header .sidebar-toggle:hover {
+  background: var(--accent-dim);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+/* ── Floating open button (visible only when sidebar is collapsed) ───────── */
+.sidebar-open-btn {
+  display: none;
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 45;
+  width: 36px;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--text);
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(15, 30, 22, 0.08);
+}
+.sidebar-open-btn:hover { background: var(--accent-dim); }
+body.sidebar-collapsed .sidebar-open-btn { display: inline-flex; }
+
+/* Account for iPhone notch on the floating button */
+@supports (padding: env(safe-area-inset-top)) {
+  .sidebar-open-btn {
+    top: calc(12px + env(safe-area-inset-top));
+    left: calc(12px + env(safe-area-inset-left));
+  }
+}

@@ -43,9 +43,8 @@ function initSidebarToggle() {
     localStorage.setItem(KEY, collapsed ? '1' : '0');
   };
 
-  document.getElementById('sidebarToggle').addEventListener('click', () => {
-    apply(!document.body.classList.contains('sidebar-collapsed'));
-  });
+  document.getElementById('sidebarToggle').addEventListener('click', () => apply(true));
+  document.getElementById('sidebarOpenBtn').addEventListener('click', () => apply(false));
   document.getElementById('sidebarBackdrop').addEventListener('click', () => apply(true));
 
   // On mobile, picking a project should auto-close the sidebar.
