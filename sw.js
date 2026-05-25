@@ -1,6 +1,6 @@
 // Service worker: caches app shell, serves offline, network-first when online.
 
-const CACHE = 'kanban-v13';
+const CACHE = 'kanban-v14';
 const SHELL = [
   './',
   './index.html',

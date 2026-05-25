@@ -264,7 +264,11 @@ function buildSpanBar({ span, lane, dayStart, dayEnd }, weekStartTm, weekEndTm) 
   const recur = (card.recurrence && card.recurrence !== 'none')
     ? `<span class="cal-chip-recur" title="반복">🔁</span>` : '';
 
-  bar.innerHTML = `${icon}<span class="cal-bar-title">${escHtml(displayTitle(card.title))}</span>${recur}`;
+  // Invisible resize handles on the actual start/end edges only.
+  const handleL = continuesLeft  ? '' : '<div class="span-resize span-resize-l" aria-hidden="true"></div>';
+  const handleR = continuesRight ? '' : '<div class="span-resize span-resize-r" aria-hidden="true"></div>';
+
+  bar.innerHTML = `${handleL}${icon}<span class="cal-bar-title">${escHtml(displayTitle(card.title))}</span>${recur}${handleR}`;
 
   bar.addEventListener('click', (e) => {
     if (bar.dataset.suppressClick) return;
@@ -342,26 +346,34 @@ function buildChip(card, project, spanRole = 'single') {
   return chip;
 }
 
-// Span-bar pointerdown — uses the day under the pointer for delta calc, then
-// hands off to the same movement/up pipeline as chip drag.
+// Span-bar pointerdown — detect resize handle vs middle (shift) by hit-target.
 function onBarPointerDown(e, card, project, barEl) {
   if (drag) return;
   if (e.button !== undefined && e.button !== 0) return;
 
-  // Day under the press — hide bar momentarily so we can hit-test the cell.
-  const prev = barEl.style.pointerEvents;
-  barEl.style.pointerEvents = 'none';
-  const under = document.elementFromPoint(e.clientX, e.clientY);
-  barEl.style.pointerEvents = prev;
-  const cell = under && under.closest('.cal-day-cell');
-  const chipDate = cell ? cell.dataset.date : null;
+  // Role: which part of the bar was grabbed.
+  let role = 'bar';
+  const cls = e.target && e.target.classList;
+  if (cls && cls.contains('span-resize-l')) role = 'start';
+  else if (cls && cls.contains('span-resize-r')) role = 'end';
+
+  // chipDate only relevant for shift (bar). For resize we just want the target date.
+  let chipDate = null;
+  if (role === 'bar') {
+    const prev = barEl.style.pointerEvents;
+    barEl.style.pointerEvents = 'none';
+    const under = document.elementFromPoint(e.clientX, e.clientY);
+    barEl.style.pointerEvents = prev;
+    const cell = under && under.closest('.cal-day-cell');
+    chipDate = cell ? cell.dataset.date : null;
+  }
 
   drag = {
     cardId: card.id,
     projectId: project.id,
     chipEl: barEl,
     chipDate,
-    spanRole: 'bar',
+    spanRole: role,
     pointerId: e.pointerId,
     pointerType: e.pointerType,
     startX: e.clientX,
@@ -531,27 +543,34 @@ function onChipPointerMove(e) {
   }
 
   e.preventDefault();
-  moveChipGhost(e.clientX, e.clientY);
+  if (drag.ghost) moveChipGhost(e.clientX, e.clientY);
   updateChipDropTarget(e.clientX, e.clientY);
 }
 
 function startChipDrag(x, y) {
-  const rect = drag.chipEl.getBoundingClientRect();
-  drag.offsetX = drag.startX - rect.left;
-  drag.offsetY = drag.startY - rect.top;
   drag.started = true;
-
-  const ghost = drag.chipEl.cloneNode(true);
-  ghost.classList.add('cal-chip-ghost');
-  ghost.style.width = rect.width + 'px';
-  document.body.appendChild(ghost);
-  drag.ghost = ghost;
-
-  drag.chipEl.classList.add('dragging');
   document.body.classList.add('dragging-active');
 
+  const isResize = drag.spanRole === 'start' || drag.spanRole === 'end';
+
+  if (!isResize) {
+    const rect = drag.chipEl.getBoundingClientRect();
+    drag.offsetX = drag.startX - rect.left;
+    drag.offsetY = drag.startY - rect.top;
+    const ghost = drag.chipEl.cloneNode(true);
+    ghost.classList.add('cal-chip-ghost');
+    ghost.style.width = rect.width + 'px';
+    ghost.style.left = '';   // clear inline % from span bars so fixed-pos px works
+    ghost.style.top  = '';
+    document.body.appendChild(ghost);
+    drag.ghost = ghost;
+    moveChipGhost(x, y);
+  }
+
+  drag.chipEl.classList.add(isResize ? 'resizing' : 'dragging');
+  document.body.dataset.dragMode = isResize ? 'resize' : 'shift';
+
   try { drag.chipEl.setPointerCapture(drag.pointerId); } catch {}
-  moveChipGhost(x, y);
   updateChipDropTarget(x, y);
   if (drag.pointerType === 'touch' && navigator.vibrate) navigator.vibrate(15);
 }
@@ -597,10 +616,11 @@ function onChipPointerUp(e) {
 function chipCleanup() {
   if (drag) {
     if (drag.ghost) drag.ghost.remove();
-    if (drag.chipEl) drag.chipEl.classList.remove('dragging');
+    if (drag.chipEl) drag.chipEl.classList.remove('dragging', 'resizing');
     try { drag.chipEl.releasePointerCapture(drag.pointerId); } catch {}
   }
   document.body.classList.remove('dragging-active');
+  delete document.body.dataset.dragMode;
   document.querySelectorAll('.cal-day-cell.drag-over').forEach(c => c.classList.remove('drag-over'));
   window.removeEventListener('pointermove', onChipPointerMove);
   window.removeEventListener('pointerup', onChipPointerUp);
@@ -609,29 +629,50 @@ function chipCleanup() {
 }
 
 // Apply the drop:
-//   - Tray chip (no chipDate)  → assign due = target, clear start
-//   - Single-day card           → due = target
-//   - Span bar (role='bar')    → shift the whole range by (target - chipDate)
-// (Resize a span's start/end via the modal date inputs.)
+//   - Tray chip (no chipDate)            → assign due = target, clear start
+//   - Single-day card                    → due = target
+//   - Span bar, role='start'             → resize start (clamp to ≤ due)
+//   - Span bar, role='end'               → resize end   (clamp to ≥ start)
+//   - Span bar, role='bar' (middle/body) → shift whole range by (target - chipDate)
 function applyDrop(d) {
   const r = findCardAnywhere(d.cardId);
   if (!r) return;
   const c = r.card;
 
-  if (!d.chipDate) {
+  if (!d.chipDate && d.spanRole !== 'start' && d.spanRole !== 'end') {
     if (c.due !== d.targetDate) { c.due = d.targetDate; c.start = ''; save(); }
     return;
   }
   if (!c.start || c.start === c.due) {
+    // Single-day card — straight reschedule.
     if (c.due !== d.targetDate) { c.due = d.targetDate; save(); }
     return;
   }
-  // Multi-day shift
-  const delta = daysBetween(d.chipDate, d.targetDate);
-  if (delta !== 0) {
-    c.start = addDaysISO(c.start, delta);
-    c.due   = addDaysISO(c.due,   delta);
-    save();
+
+  // Multi-day card from here on.
+  if (d.spanRole === 'start') {
+    let s = d.targetDate;
+    if (s > c.due) s = c.due;          // clamp: start can't pass end
+    if (s !== c.start) {
+      c.start = (s === c.due) ? '' : s; // collapse to single-day if they meet
+      save();
+    }
+  } else if (d.spanRole === 'end') {
+    let e = d.targetDate;
+    if (e < c.start) e = c.start;      // clamp: end can't pass start
+    if (e !== c.due) {
+      c.due = e;
+      if (e === c.start) c.start = ''; // collapse to single-day if they meet
+      save();
+    }
+  } else {
+    // 'bar' or fallback → shift entire range
+    const delta = daysBetween(d.chipDate, d.targetDate);
+    if (delta !== 0) {
+      c.start = addDaysISO(c.start, delta);
+      c.due   = addDaysISO(c.due,   delta);
+      save();
+    }
   }
 }
 
