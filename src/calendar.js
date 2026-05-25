@@ -3,7 +3,7 @@
 import {
   state, findCardAnywhere, setActiveProject, save,
 } from './state.js';
-import { escHtml } from './utils.js';
+import { escHtml, displayTitle } from './utils.js';
 import { openModal } from './modal.js';
 import { refreshAll } from './refresh.js';
 
@@ -139,8 +139,8 @@ function buildCell(d, byDate, todayStr) {
 
   const MAX_VISIBLE = window.matchMedia('(max-width: 768px)').matches ? 2 : 4;
   const visible = cards.slice(0, MAX_VISIBLE);
-  visible.forEach(({ card, project }) => {
-    list.appendChild(buildChip(card, project));
+  visible.forEach(({ card, project, spanRole }) => {
+    list.appendChild(buildChip(card, project, spanRole));
   });
   if (cards.length > MAX_VISIBLE) {
     const more = document.createElement('button');
@@ -162,6 +162,9 @@ function buildCell(d, byDate, todayStr) {
 }
 
 // ── Collect cards by ISO date string ────────────────────────────────────────
+// Single-day cards get one entry on their due date.
+// Multi-day cards (start && due && start !== due) get one entry per day in the
+// range, with `spanRole` ∈ {'start','middle','end','single'}.
 function collectCardsByDate() {
   const map = {};
   for (const project of state.projects) {
@@ -170,14 +173,36 @@ function collectCardsByDate() {
       for (const card of col.cards) {
         if (card.archived) continue;
         if (!card.due) continue;
-        (map[card.due] = map[card.due] || []).push({ card, project, col });
+
+        const startStr = card.start && card.start <= card.due ? card.start : card.due;
+        const endStr   = card.due;
+        const isSpan   = startStr !== endStr;
+
+        if (!isSpan) {
+          push(map, endStr, card, project, col, 'single');
+          continue;
+        }
+
+        const cur = new Date(startStr + 'T00:00:00');
+        const end = new Date(endStr   + 'T00:00:00');
+        while (cur <= end) {
+          const ds = ymd(cur);
+          let role = 'middle';
+          if (ds === startStr) role = 'start';
+          else if (ds === endStr) role = 'end';
+          push(map, ds, card, project, col, role);
+          cur.setDate(cur.getDate() + 1);
+        }
       }
     }
   }
-  // Sort each bucket by priority then title.
+  // Spans bubble to the top so multi-day bars sit consistently; then priority, title.
   const order = { high: 0, medium: 1, low: 2, none: 3 };
   for (const k of Object.keys(map)) {
     map[k].sort((a, b) => {
+      const aSpan = a.spanRole !== 'single' ? 0 : 1;
+      const bSpan = b.spanRole !== 'single' ? 0 : 1;
+      if (aSpan !== bSpan) return aSpan - bSpan;
       const pa = order[a.card.priority] ?? 3;
       const pb = order[b.card.priority] ?? 3;
       if (pa !== pb) return pa - pb;
@@ -187,13 +212,18 @@ function collectCardsByDate() {
   return map;
 }
 
+function push(map, ds, card, project, col, spanRole) {
+  (map[ds] = map[ds] || []).push({ card, project, col, spanRole });
+}
+
 // ── Chip ────────────────────────────────────────────────────────────────────
-function buildChip(card, project) {
+function buildChip(card, project, spanRole = 'single') {
   const chip = document.createElement('div');
   const pri = card.priority && card.priority !== 'none' ? ` p-${card.priority}` : '';
-  chip.className = 'cal-chip' + pri;
+  chip.className = `cal-chip span-${spanRole}${pri}`;
   chip.dataset.cardId = card.id;
   chip.dataset.projectId = project.id;
+  chip.dataset.spanRole = spanRole;
 
   const icon = (scope === 'all')
     ? `<span class="cal-chip-icon">${escHtml(project.icon || '📁')}</span>`
@@ -201,7 +231,11 @@ function buildChip(card, project) {
   const recur = (card.recurrence && card.recurrence !== 'none')
     ? `<span class="cal-chip-recur" title="반복">🔁</span>` : '';
 
-  chip.innerHTML = `${icon}<span class="cal-chip-title">${escHtml(card.title)}</span>${recur}`;
+  // Show title on start/single; on middle/end keep a subtle continuation marker
+  // (the title is repeated to keep each day readable on touch devices).
+  const titleHtml = `<span class="cal-chip-title">${escHtml(displayTitle(card.title))}</span>`;
+
+  chip.innerHTML = `${icon}${titleHtml}${recur}`;
 
   chip.addEventListener('click', (e) => {
     if (chip.dataset.suppressClick) return;
@@ -253,7 +287,7 @@ function openDayDetail(dateStr, cards) {
     row.innerHTML = `
       <div class="cal-day-row-stripe${pri}"></div>
       <div class="cal-day-row-main">
-        <div class="cal-day-row-title">${escHtml(card.title)}</div>
+        <div class="cal-day-row-title">${escHtml(displayTitle(card.title))}</div>
         <div class="cal-day-row-meta">${escHtml((project.icon || '📁') + ' ' + project.name)}</div>
       </div>
     `;
@@ -307,10 +341,17 @@ function onChipPointerDown(e, card, project, chipEl) {
   if (drag) return;
   if (e.button !== undefined && e.button !== 0) return;
 
+  // Day the chip is rendered on (null for chips in the no-due tray).
+  const cell = chipEl.closest('.cal-cell');
+  const chipDate = cell ? cell.dataset.date : null;
+  const spanRole = chipEl.dataset.spanRole || 'single';
+
   drag = {
     cardId: card.id,
     projectId: project.id,
     chipEl,
+    chipDate,
+    spanRole,
     pointerId: e.pointerId,
     pointerType: e.pointerType,
     startX: e.clientX,
@@ -403,11 +444,7 @@ function onChipPointerUp(e) {
 
   if (drag.started) {
     if (drag.targetDate) {
-      const r = findCardAnywhere(drag.cardId);
-      if (r && r.card.due !== drag.targetDate) {
-        r.card.due = drag.targetDate;
-        save();
-      }
+      applyDrop(drag);
     }
     // Block the synthetic click that follows.
     drag.chipEl.dataset.suppressClick = '1';
@@ -432,6 +469,59 @@ function chipCleanup() {
   window.removeEventListener('pointerup', onChipPointerUp);
   window.removeEventListener('pointercancel', onChipPointerUp);
   drag = null;
+}
+
+// Apply the drop, with span-aware semantics:
+//  - Tray chip (no chipDate)        → assign due = target, clear start
+//  - Single-day card                → due = target
+//  - Multi-day, role='start'        → resize start (clamped <= due)
+//  - Multi-day, role='end'          → resize end   (clamped >= start)
+//  - Multi-day, role='middle'       → shift whole span by (target - chipDate)
+function applyDrop(d) {
+  const r = findCardAnywhere(d.cardId);
+  if (!r) return;
+  const c = r.card;
+
+  if (!d.chipDate) {
+    if (c.due !== d.targetDate) { c.due = d.targetDate; c.start = ''; save(); }
+    return;
+  }
+  if (!c.start || c.start === c.due) {
+    if (c.due !== d.targetDate) { c.due = d.targetDate; save(); }
+    return;
+  }
+
+  // Multi-day handling
+  if (d.spanRole === 'start') {
+    let s = d.targetDate;
+    if (s > c.due) s = c.due;            // can't drag start past end
+    if (s === c.due) c.start = '';       // collapsed to single-day
+    else c.start = s;
+    save();
+  } else if (d.spanRole === 'end') {
+    let e = d.targetDate;
+    if (e < c.start) e = c.start;        // can't drag end before start
+    c.due = e;
+    if (e === c.start) c.start = '';     // collapsed to single-day
+    save();
+  } else {
+    // middle / single (single shouldn't happen here but safe) → shift entire span
+    const delta = daysBetween(d.chipDate, d.targetDate);
+    if (delta !== 0) {
+      c.start = addDaysISO(c.start, delta);
+      c.due   = addDaysISO(c.due,   delta);
+      save();
+    }
+  }
+}
+
+function daysBetween(a, b) {
+  return Math.round((new Date(b + 'T00:00:00') - new Date(a + 'T00:00:00')) / 86400000);
+}
+function addDaysISO(dateStr, delta) {
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate() + delta);
+  return ymd(d);
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────

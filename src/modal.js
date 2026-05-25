@@ -2,7 +2,7 @@
 // Also handles: recurrence, duplicate, save-as-template, markdown preview, image paste.
 
 import {
-  save, findCard, getColById, activeColumns, tagColor, state,
+  save, findCard, getColById, activeColumns, activeProject, tagColor, state,
 } from './state.js';
 import { escHtml, renderMarkdown, compressImageBlob, nextDueDate } from './utils.js';
 import { refreshAll } from './refresh.js';
@@ -33,8 +33,14 @@ export function openModal(cardId) {
 
   document.getElementById('mTitle').value = card.title;
   document.getElementById('mDesc').value  = card.desc || '';
+  document.getElementById('mStart').value = card.start || '';
   document.getElementById('mDue').value   = card.due  || '';
   document.getElementById('mRecurrence').value = m.recurrence;
+
+  // Eyebrow: project · column
+  const proj = (typeof activeProject === 'function' && activeProject()) || null;
+  document.getElementById('mEyebrow').textContent =
+    (proj ? `${proj.icon || '📁'} ${proj.name}` : '') + (col ? ` · ${col.title}` : '');
 
   const sel = document.getElementById('mColSelect');
   sel.innerHTML = activeColumns().map(c =>
@@ -47,10 +53,16 @@ export function openModal(cardId) {
   renderPriorityPills();
   renderTagPills();
   renderChecklist();
+  applyPriorityStrip();
 
   document.getElementById('overlay').classList.add('open');
   document.getElementById('mTitle').focus();
   requestAnimationFrame(() => autoResize(document.getElementById('mDesc')));
+}
+
+function applyPriorityStrip() {
+  const modal = document.getElementById('modal');
+  if (modal) modal.dataset.priority = m.priority;
 }
 
 function autoResize(el) {
@@ -67,10 +79,21 @@ export function closeModal() {
 
 // ── Read-from-DOM helper ────────────────────────────────────────────────────
 function readForm() {
+  let start = document.getElementById('mStart').value || '';
+  let due   = document.getElementById('mDue').value   || '';
+
+  // Normalize: if user only entered a start date, treat as a single-day on that date.
+  if (start && !due) { due = start; start = ''; }
+  // Swap if start > due so the user doesn't end up with an invalid range.
+  if (start && due && start > due) [start, due] = [due, start];
+  // If start === due, drop start — it's a single-day card.
+  if (start && start === due) start = '';
+
   return {
     title:      document.getElementById('mTitle').value.trim(),
     desc:       document.getElementById('mDesc').value.trim(),
-    due:        document.getElementById('mDue').value || '',
+    start,
+    due,
     recurrence: document.getElementById('mRecurrence').value || 'none',
     priority:   m.priority,
     tags:       [...m.tags],
@@ -360,6 +383,7 @@ export function initModal() {
     p.addEventListener('click', () => {
       m.priority = p.dataset.p;
       renderPriorityPills();
+      applyPriorityStrip();
     });
   });
 

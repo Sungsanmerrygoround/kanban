@@ -3,7 +3,7 @@
 import {
   save, getColById, findCard, tagColor, state,
 } from './state.js';
-import { uid, escHtml, dueStatus, formatDue } from './utils.js';
+import { uid, escHtml, dueStatus, formatDue, displayTitle } from './utils.js';
 import { refreshAll } from './refresh.js';
 import { openModal } from './modal.js';
 
@@ -52,7 +52,7 @@ export function buildCard(card) {
 
   const hasMeta = tagsHtml || priorityBadge || dueBadge || clBadge || recurBadge;
   el.innerHTML = `
-    <div class="card-title">${escHtml(card.title)}${recurBadge}</div>
+    <div class="card-title">${escHtml(displayTitle(card.title))}${recurBadge}</div>
     ${descPlain ? `<div class="card-desc">${escHtml(descPlain)}</div>` : ''}
     ${hasMeta ? `<div class="card-meta">${tagsHtml}${dueBadge}${clBadge}${priorityBadge}</div>` : ''}
   `;

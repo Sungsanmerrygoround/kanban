@@ -2,6 +2,26 @@
 
 export const uid = () => '_' + Math.random().toString(36).slice(2, 9);
 
+// Strip leading emojis/whitespace from a display string.
+// Used on mobile so narrow cells don't waste glyph width.
+export function stripLeadingEmoji(s) {
+  if (!s) return s;
+  return s
+    .replace(/^[\p{Extended_Pictographic}\p{Emoji_Modifier}\p{Emoji_Modifier_Base}︎️‍\s]+/u, '')
+    .trim();
+}
+
+// Display title — drops leading emojis on mobile to gain horizontal space.
+export function displayTitle(title) {
+  if (!title) return title;
+  const mobile = typeof window !== 'undefined'
+    && window.matchMedia
+    && window.matchMedia('(max-width: 768px)').matches;
+  if (!mobile) return title;
+  const stripped = stripLeadingEmoji(title);
+  return stripped || title;   // fallback if title was *only* emoji
+}
+
 export function escHtml(s) {
   return String(s)
     .replace(/&/g, '&amp;')
