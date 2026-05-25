@@ -9,6 +9,7 @@ import { initModal, closeModal } from './modal.js';
 import { initArchive, closeArchive } from './archive.js';
 import { initAuth, onUserChange } from './auth.js';
 import { subscribeUserState } from './sync.js';
+import { initNotifications } from './notifications.js';
 
 // ── Wire global events ──────────────────────────────────────────────────────
 document.getElementById('addColNavBtn').addEventListener('click', addColumn);
@@ -27,6 +28,7 @@ initModal();
 initArchive();
 initAuth();
 initSidebarToggle();
+initNotifications();
 
 // ── Sidebar collapse toggle ─────────────────────────────────────────────────
 function initSidebarToggle() {

@@ -1,7 +1,7 @@
 // Card rendering, inline add form, pointer-based drag & drop (mouse + touch).
 
 import {
-  save, getColById, findCard, tagColor,
+  save, getColById, findCard, tagColor, state,
 } from './state.js';
 import { uid, escHtml, dueStatus, formatDue } from './utils.js';
 import { refreshAll } from './refresh.js';
@@ -42,10 +42,18 @@ export function buildCard(card) {
     ? `<span class="checklist-badge ${clDone === cl.length ? 'done' : ''}">${checkIcon()}${clDone}/${cl.length}</span>`
     : '';
 
-  const hasMeta = tagsHtml || priorityBadge || dueBadge || clBadge;
+  const recurBadge = (card.recurrence && card.recurrence !== 'none')
+    ? `<span class="recur-badge" title="반복: ${RECUR_LABELS[card.recurrence] || ''}">🔁</span>`
+    : '';
+
+  // Show desc as plain text (first 2 lines via CSS), stripped of markdown markers
+  // so a paste of "**중요**" doesn't look like literal asterisks on the card.
+  const descPlain = card.desc ? stripMarkdown(card.desc) : '';
+
+  const hasMeta = tagsHtml || priorityBadge || dueBadge || clBadge || recurBadge;
   el.innerHTML = `
-    <div class="card-title">${escHtml(card.title)}</div>
-    ${card.desc ? `<div class="card-desc">${escHtml(card.desc)}</div>` : ''}
+    <div class="card-title">${escHtml(card.title)}${recurBadge}</div>
+    ${descPlain ? `<div class="card-desc">${escHtml(descPlain)}</div>` : ''}
     ${hasMeta ? `<div class="card-meta">${tagsHtml}${dueBadge}${clBadge}${priorityBadge}</div>` : ''}
   `;
 
@@ -257,10 +265,39 @@ export function closeQuickForm(colId) {
 
 export function submitQuickForm(colId) {
   const form = document.getElementById('qf-' + colId);
-  const title = form.querySelector('textarea').value.trim();
-  if (!title) return;
+  const ta = form.querySelector('textarea');
+  const title = ta.value.trim();
+  const tplSel = form.querySelector('.qf-template');
+  const tplId  = tplSel ? tplSel.value : '';
   const col = getColById(colId);
-  col.cards.push({ id: uid(), title, desc: '', priority: 'none', tags: [], due: '' });
+
+  if (tplId) {
+    const t = (state.templates || []).find(x => x.id === tplId);
+    if (t) {
+      col.cards.push({
+        id: uid(),
+        title: title || t.title,
+        desc: t.desc || '',
+        priority: t.priority || 'none',
+        tags: [...(t.tags || [])],
+        due: '',
+        checklist: (t.checklist || []).map(i => ({ text: i.text, done: false })),
+        recurrence: t.recurrence || 'none',
+      });
+      ta.value = '';
+      if (tplSel) tplSel.value = '';
+      save();
+      refreshAll();
+      return;
+    }
+  }
+
+  if (!title) return;
+  col.cards.push({
+    id: uid(), title, desc: '', priority: 'none', tags: [], due: '',
+    checklist: [], recurrence: 'none',
+  });
+  ta.value = '';
   save();
   refreshAll();
 }
@@ -286,6 +323,16 @@ function clearPlaceholders() {
 
 const PRIORITY_LABELS = { high: '높음', medium: '중간', low: '낮음' };
 const PRIORITY_COLORS = { high: 'red', medium: 'yellow', low: 'green' };
+const RECUR_LABELS = { daily: '매일', weekly: '매주', monthly: '매월' };
+
+function stripMarkdown(s) {
+  return s
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '[이미지]')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/[`*#>_~-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 function priorityLabel(p) { return PRIORITY_LABELS[p] || ''; }
 function priorityColor(p) { return PRIORITY_COLORS[p] || 'gray'; }
 

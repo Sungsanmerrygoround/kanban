@@ -1,6 +1,6 @@
 // Service worker: caches app shell, serves offline, network-first when online.
 
-const CACHE = 'kanban-v9';
+const CACHE = 'kanban-v10';
 const SHELL = [
   './',
   './index.html',
@@ -20,6 +20,7 @@ const SHELL = [
   './src/sync.js',
   './src/firebase.js',
   './src/firebase-config.js',
+  './src/notifications.js',
 ];
 
 self.addEventListener('install', (e) => {

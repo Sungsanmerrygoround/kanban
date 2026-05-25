@@ -144,11 +144,20 @@ function buildColumn(col) {
   el.appendChild(area);
 
   // Add-card area
+  const templates = (state.templates || []);
+  const tplSelectHtml = templates.length ? `
+    <select class="qf-template" data-col-id="${col.id}">
+      <option value="">📋 템플릿에서 시작 (선택)</option>
+      ${templates.map(t => `<option value="${t.id}">${escHtml(t.name)}</option>`).join('')}
+    </select>
+  ` : '';
+
   const addArea = document.createElement('div');
   addArea.className = 'add-area';
   addArea.innerHTML = `
     <button class="add-card-btn" data-col-id="${col.id}">${plusIcon()} 카드 추가</button>
     <div class="quick-form" id="qf-${col.id}">
+      ${tplSelectHtml}
       <textarea rows="2" placeholder="카드 제목 입력..."></textarea>
       <div class="quick-actions">
         <button class="qa-add" data-col-id="${col.id}">추가</button>

@@ -742,6 +742,40 @@ body {
 }
 .add-col-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
 
+/* ── Notification bell button ───────────────────────────────────────────── */
+.notif-btn { padding: 0.42rem 0.55rem; }
+.notif-btn.on  { color: var(--text); background: var(--surface); }
+.notif-btn.off { color: var(--muted); opacity: 0.6; }
+
+/* ── Recurring badge on card ────────────────────────────────────────────── */
+.recur-badge {
+  display: inline-block;
+  margin-left: 0.35rem;
+  font-size: 0.78rem;
+  vertical-align: middle;
+  opacity: 0.8;
+}
+
+/* ── Flash toast ─────────────────────────────────────────────────────────── */
+.flash-msg {
+  position: fixed;
+  left: 50%;
+  bottom: 32px;
+  transform: translateX(-50%) translateY(20px);
+  background: #1a1a1a;
+  color: #fff;
+  padding: 0.6rem 1.1rem;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.18);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s, transform 0.18s;
+  z-index: 1000;
+}
+.flash-msg.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
 /* ── Modal ─────────────────────────────────────────────────────────────── */
 .overlay {
   position: fixed;
@@ -926,11 +960,42 @@ textarea.field-input { resize: vertical; min-height: 80px; line-height: 1.5; }
 .modal-foot {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 0.4rem;
+  flex-wrap: wrap;
   margin-top: 1.25rem;
   padding-top: 1rem;
   border-top: 1px solid var(--border);
 }
+
+.btn-ghost {
+  padding: 0.4rem 0.7rem;
+  background: transparent;
+  color: var(--muted2);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.btn-ghost:hover { background: var(--surface); color: var(--text); border-color: var(--border2); }
+
+/* Template selector in quick-form */
+.qf-template {
+  width: 100%;
+  padding: 0.4rem 0.55rem;
+  font: inherit;
+  font-size: 0.78rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--text);
+  cursor: pointer;
+  margin-bottom: 0.45rem;
+}
+.qf-template:focus { outline: none; border-color: var(--border2); }
 
 .btn-danger {
   padding: 0.38rem 0.85rem;
@@ -1119,6 +1184,69 @@ body.dragging-active .card { cursor: grabbing; }
 @media (display-mode: standalone) {
   body { overscroll-behavior: none; }
 }
+
+/* ── Notes header + preview toggle + markdown preview ───────────────────── */
+.notes-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.4rem;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.notes-toolbar { display: flex; align-items: center; gap: 0.55rem; }
+.notes-hint {
+  font-size: 0.68rem;
+  color: var(--muted);
+  letter-spacing: 0;
+}
+.notes-toggle {
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.25rem 0.55rem;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+.notes-toggle:hover { background: var(--surface); border-color: var(--border2); }
+
+.notes-preview {
+  min-height: 140px;
+  max-height: 480px;
+  overflow-y: auto;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--card-text);
+}
+.notes-preview h1 { font-size: 1.1rem; font-weight: 700; margin: 0.5rem 0 0.4rem; }
+.notes-preview h2 { font-size: 1rem; font-weight: 700; margin: 0.5rem 0 0.35rem; }
+.notes-preview h3 { font-size: 0.92rem; font-weight: 700; margin: 0.45rem 0 0.3rem; }
+.notes-preview p  { margin: 0.4rem 0; }
+.notes-preview ul { margin: 0.4rem 0 0.4rem 1.2rem; }
+.notes-preview li { margin: 0.15rem 0; }
+.notes-preview a  { color: #1a73e8; text-decoration: underline; }
+.notes-preview code {
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 0.85em;
+  background: var(--surface2);
+  padding: 0.08em 0.35em;
+  border-radius: 4px;
+}
+.notes-preview .md-img {
+  max-width: 100%;
+  border-radius: 6px;
+  margin: 0.5rem 0;
+  border: 1px solid var(--border);
+}
+.notes-preview .notes-empty { color: var(--muted); font-style: italic; }
 
 /* ── Notes textarea (auto-grow) ──────────────────────────────────────────── */
 .notes-input {

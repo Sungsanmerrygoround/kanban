@@ -140,6 +140,7 @@ function applyShapeGuards() {
   if (!state.activeProjectId || !state.projects.find(p => p.id === state.activeProjectId)) {
     state.activeProjectId = state.projects[0].id;
   }
+  if (!Array.isArray(state.templates)) state.templates = [];
 }
 
 function saveLocal() {
