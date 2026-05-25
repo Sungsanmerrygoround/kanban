@@ -971,24 +971,9 @@ body.view-calendar .board {
   outline-offset: 1px;
 }
 
-/* Invisible resize handles on the bar's actual start/end edges */
-.span-resize {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 9px;
-  cursor: ew-resize;
-  z-index: 1;
-  background: transparent;
-  /* A subtle accent on hover so users discover the resize affordance */
-  transition: background 0.12s;
-}
-.span-resize:hover { background: rgba(0,0,0,0.08); }
-.span-resize-l { left: 0;  border-radius: 5px 0 0 5px; }
-.span-resize-r { right: 0; border-radius: 0 5px 5px 0; }
-
 /* While resizing, force the resize cursor everywhere so the user keeps the
-   visual cue even if they wander outside the bar. */
+   visual cue even if they wander outside the bar. Hover cursor on the bar
+   itself is set inline by JS based on which day-of-span the pointer is over. */
 body[data-drag-mode="resize"],
 body[data-drag-mode="resize"] * { cursor: ew-resize !important; }
 body[data-drag-mode="shift"]    .cal-span-bar { cursor: grabbing; }
@@ -1242,7 +1227,6 @@ body[data-drag-mode="shift"]    .cal-span-bar { cursor: grabbing; }
   .cal-day-cell { min-height: calc(76px + var(--lanes) * (var(--lane-h) + var(--lane-gap))); padding: 0.3rem 0.28rem 0.35rem; gap: 0.18rem; }
   .cal-span-bar { font-size: 0.62rem; padding: 0 0.35rem; height: 18px; }
   .cal-month { --lane-h: 18px; }
-  .span-resize { width: 14px; }    /* bigger touch target on phone */
   .cal-date-num { font-size: 0.7rem; }
   .cal-date-num span { min-width: 18px; height: 18px; }
   .cal-chip {

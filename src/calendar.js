@@ -264,11 +264,8 @@ function buildSpanBar({ span, lane, dayStart, dayEnd }, weekStartTm, weekEndTm) 
   const recur = (card.recurrence && card.recurrence !== 'none')
     ? `<span class="cal-chip-recur" title="반복">🔁</span>` : '';
 
-  // Invisible resize handles on the actual start/end edges only.
-  const handleL = continuesLeft  ? '' : '<div class="span-resize span-resize-l" aria-hidden="true"></div>';
-  const handleR = continuesRight ? '' : '<div class="span-resize span-resize-r" aria-hidden="true"></div>';
-
-  bar.innerHTML = `${handleL}${icon}<span class="cal-bar-title">${escHtml(displayTitle(card.title))}</span>${recur}${handleR}`;
+  bar.innerHTML = `${icon}<span class="cal-bar-title">${escHtml(displayTitle(card.title))}</span>${recur}`;
+  bar.dataset.dayCount = String(dayEnd - dayStart + 1);
 
   bar.addEventListener('click', (e) => {
     if (bar.dataset.suppressClick) return;
@@ -276,6 +273,21 @@ function buildSpanBar({ span, lane, dayStart, dayEnd }, weekStartTm, weekEndTm) 
     jumpToCard(card.id, project.id);
   });
   bar.addEventListener('pointerdown', (e) => onBarPointerDown(e, card, project, bar));
+
+  // Hover cursor cue: show ew-resize over the start/end day of the span so the
+  // user discovers the resize affordance. Light math, no DOM lookups.
+  bar.addEventListener('mousemove', (e) => {
+    if (drag) return;
+    const rect = bar.getBoundingClientRect();
+    const offsetX = e.clientX - rect.left;
+    const days = parseInt(bar.dataset.dayCount, 10) || 1;
+    const dayW = rect.width / days;
+    const idx = Math.min(days - 1, Math.max(0, Math.floor(offsetX / dayW)));
+    const isStart = idx === 0          && !bar.classList.contains('continues-left');
+    const isEnd   = idx === days - 1   && !bar.classList.contains('continues-right');
+    bar.style.cursor = (isStart || isEnd) ? 'ew-resize' : 'grab';
+  });
+
   return bar;
 }
 
@@ -346,27 +358,28 @@ function buildChip(card, project, spanRole = 'single') {
   return chip;
 }
 
-// Span-bar pointerdown — detect resize handle vs middle (shift) by hit-target.
+// Span-bar pointerdown — role is determined by which DAY of the span the user
+// pressed on:
+//   pressed day === card.start  → 'start'  (resize start)
+//   pressed day === card.due    → 'end'    (resize end)
+//   else                          → 'bar'   (shift whole range)
+// "continues-left/right" weeks: pressing the visible edge does NOT match the
+// real start/end date, so naturally falls back to 'bar' (correct).
 function onBarPointerDown(e, card, project, barEl) {
   if (drag) return;
   if (e.button !== undefined && e.button !== 0) return;
 
-  // Role: which part of the bar was grabbed.
-  let role = 'bar';
-  const cls = e.target && e.target.classList;
-  if (cls && cls.contains('span-resize-l')) role = 'start';
-  else if (cls && cls.contains('span-resize-r')) role = 'end';
+  // Identify the cell directly under the press (the day the user actually clicked).
+  const prev = barEl.style.pointerEvents;
+  barEl.style.pointerEvents = 'none';
+  const under = document.elementFromPoint(e.clientX, e.clientY);
+  barEl.style.pointerEvents = prev;
+  const cell = under && under.closest('.cal-day-cell');
+  const chipDate = cell ? cell.dataset.date : null;
 
-  // chipDate only relevant for shift (bar). For resize we just want the target date.
-  let chipDate = null;
-  if (role === 'bar') {
-    const prev = barEl.style.pointerEvents;
-    barEl.style.pointerEvents = 'none';
-    const under = document.elementFromPoint(e.clientX, e.clientY);
-    barEl.style.pointerEvents = prev;
-    const cell = under && under.closest('.cal-day-cell');
-    chipDate = cell ? cell.dataset.date : null;
-  }
+  let role = 'bar';
+  if (chipDate === card.start)    role = 'start';
+  else if (chipDate === card.due) role = 'end';
 
   drag = {
     cardId: card.id,
@@ -374,6 +387,11 @@ function onBarPointerDown(e, card, project, barEl) {
     chipEl: barEl,
     chipDate,
     spanRole: role,
+    // Snapshot original geometry so we can restore on cancel + drive live preview.
+    origLeft:  barEl.style.left,
+    origWidth: barEl.style.width,
+    origCardStart: card.start,
+    origCardDue:   card.due,
     pointerId: e.pointerId,
     pointerType: e.pointerType,
     startX: e.clientX,
@@ -491,7 +509,7 @@ function onChipPointerDown(e, card, project, chipEl) {
   if (e.button !== undefined && e.button !== 0) return;
 
   // Day the chip is rendered on (null for chips in the no-due tray).
-  const cell = chipEl.closest('.cal-cell');
+  const cell = chipEl.closest('.cal-day-cell');
   const chipDate = cell ? cell.dataset.date : null;
   const spanRole = chipEl.dataset.spanRole || 'single';
 
@@ -581,10 +599,16 @@ function moveChipGhost(x, y) {
 }
 
 function updateChipDropTarget(x, y) {
-  const prevDisp = drag.ghost.style.display;
-  drag.ghost.style.display = 'none';
+  // Temporarily hide whatever follows the pointer (ghost if shift, the bar
+  // itself if resize) so hit-testing finds the cell underneath.
+  const hiddenEl = drag.ghost || drag.chipEl;
+  const prevDisp = hiddenEl.style.display;
+  const prevPe   = hiddenEl.style.pointerEvents;
+  if (drag.ghost) hiddenEl.style.display = 'none';
+  else            hiddenEl.style.pointerEvents = 'none';
   const el = document.elementFromPoint(x, y);
-  drag.ghost.style.display = prevDisp;
+  if (drag.ghost) hiddenEl.style.display = prevDisp;
+  else            hiddenEl.style.pointerEvents = prevPe;
 
   document.querySelectorAll('.cal-day-cell.drag-over').forEach(c => c.classList.remove('drag-over'));
 
@@ -592,6 +616,45 @@ function updateChipDropTarget(x, y) {
   if (!cell) { drag.targetDate = null; return; }
   cell.classList.add('drag-over');
   drag.targetDate = cell.dataset.date;
+
+  // Live preview for in-week resize: visually move the bar's start/end edge.
+  if (drag.spanRole === 'start' || drag.spanRole === 'end') {
+    liveResizePreview(cell);
+  }
+}
+
+// While resizing, if the target cell sits in the same week-row as the bar,
+// update the bar's left/width in real time so the user sees the new size.
+// Cross-week drops fall back to cell-highlight only (the bar will redraw
+// across multiple weeks after refreshAll on drop).
+function liveResizePreview(targetCell) {
+  if (!drag || !drag.chipEl) return;
+  const barWeek    = drag.chipEl.closest('.cal-week');
+  const targetWeek = targetCell.closest('.cal-week');
+  if (barWeek !== targetWeek) {
+    // Different week — restore original geometry visually.
+    drag.chipEl.style.left  = drag.origLeft;
+    drag.chipEl.style.width = drag.origWidth;
+    return;
+  }
+  const cells = [...barWeek.querySelectorAll('.cal-day-cell')];
+  const targetIdx = cells.indexOf(targetCell);
+  if (targetIdx < 0) return;
+
+  // Decode current bar geometry from inline %.
+  const left  = parseFloat(drag.origLeft);                 // e.g. 28.57
+  const width = parseFloat(drag.origWidth);                 // e.g. 42.85
+  const COL = 100 / 7;
+  let dayStart = Math.round(left / COL);
+  let dayEnd   = dayStart + Math.round(width / COL) - 1;
+
+  if (drag.spanRole === 'start') {
+    dayStart = Math.min(targetIdx, dayEnd);
+  } else if (drag.spanRole === 'end') {
+    dayEnd   = Math.max(targetIdx, dayStart);
+  }
+  drag.chipEl.style.left  = (dayStart * COL) + '%';
+  drag.chipEl.style.width = ((dayEnd - dayStart + 1) * COL) + '%';
 }
 
 function onChipPointerUp(e) {
@@ -599,25 +662,32 @@ function onChipPointerUp(e) {
   clearTimeout(drag.longPressTimer);
 
   if (drag.started) {
-    if (drag.targetDate) {
-      applyDrop(drag);
-    }
+    const applied = !!drag.targetDate;
+    if (applied) applyDrop(drag);
     // Block the synthetic click that follows.
     drag.chipEl.dataset.suppressClick = '1';
     const chip = drag.chipEl;
     setTimeout(() => delete chip.dataset.suppressClick, 300);
-    chipCleanup();
-    refreshAll();
+    chipCleanup(applied);
+    if (applied) refreshAll();
   } else {
-    chipCleanup();
+    chipCleanup(false);
   }
 }
 
-function chipCleanup() {
+function chipCleanup(dropApplied) {
   if (drag) {
     if (drag.ghost) drag.ghost.remove();
     if (drag.chipEl) drag.chipEl.classList.remove('dragging', 'resizing');
     try { drag.chipEl.releasePointerCapture(drag.pointerId); } catch {}
+
+    // If a resize was previewed but not applied (cancel / no target), revert.
+    if (!dropApplied
+        && (drag.spanRole === 'start' || drag.spanRole === 'end')
+        && drag.origLeft != null) {
+      drag.chipEl.style.left  = drag.origLeft;
+      drag.chipEl.style.width = drag.origWidth;
+    }
   }
   document.body.classList.remove('dragging-active');
   delete document.body.dataset.dragMode;
