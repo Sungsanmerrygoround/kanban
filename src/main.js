@@ -2,7 +2,7 @@
 // subscribes to Firestore for real-time updates.
 
 import { load, save, applyRemote, filter, setUser } from './state.js';
-import { refreshAll } from './refresh.js';
+import { refreshAll, setView } from './refresh.js';
 import { addProject } from './sidebar.js';
 import { addColumn, renderBoard } from './board.js';
 import { initModal, closeModal } from './modal.js';
@@ -10,6 +10,7 @@ import { initArchive, closeArchive } from './archive.js';
 import { initAuth, onUserChange } from './auth.js';
 import { subscribeUserState } from './sync.js';
 import { initNotifications } from './notifications.js';
+import { initCalendar } from './calendar.js';
 
 // ── Wire global events ──────────────────────────────────────────────────────
 document.getElementById('addColNavBtn').addEventListener('click', addColumn);
@@ -17,11 +18,20 @@ document.getElementById('addProjectBtn').addEventListener('click', addProject);
 
 document.getElementById('searchInput').addEventListener('input', e => {
   filter.query = e.target.value;
-  renderBoard();
+  refreshAll();
+});
+
+// View-mode toggle (board / calendar)
+document.querySelectorAll('.vt-btn').forEach(b => {
+  b.addEventListener('click', () => setView(b.dataset.view));
 });
 
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { closeModal(); closeArchive(); }
+  if (e.key === 'Escape') {
+    closeModal();
+    closeArchive();
+    document.querySelectorAll('.cal-day-popover').forEach(p => p.remove());
+  }
 });
 
 initModal();
@@ -29,6 +39,7 @@ initArchive();
 initAuth();
 initSidebarToggle();
 initNotifications();
+initCalendar();
 
 // ── Sidebar collapse toggle ─────────────────────────────────────────────────
 function initSidebarToggle() {
