@@ -40,6 +40,14 @@ export function openModal(cardId) {
 
   document.getElementById('overlay').classList.add('open');
   document.getElementById('mTitle').focus();
+  // Auto-size notes after the overlay is laid out so scrollHeight is correct.
+  requestAnimationFrame(() => autoResize(document.getElementById('mDesc')));
+}
+
+function autoResize(el) {
+  if (!el) return;
+  el.style.height = 'auto';
+  el.style.height = Math.min(Math.max(el.scrollHeight, 140), 480) + 'px';
 }
 
 export function closeModal() {
@@ -129,16 +137,32 @@ function renderTagPills() {
 function renderChecklist() {
   const list = document.getElementById('checklistList');
   list.innerHTML = '';
+
+  const total = m.checklist.length;
+  const done  = m.checklist.filter(i => i.done).length;
+  const pct   = total ? Math.round((done / total) * 100) : 0;
+
+  const progressEl = document.getElementById('checklistProgress');
+  const fillEl     = document.getElementById('checklistBarFill');
+  const barWrap    = document.getElementById('checklistBar');
+  if (progressEl) progressEl.textContent = total ? `${done} / ${total}` : '';
+  if (fillEl)     fillEl.style.width = pct + '%';
+  if (barWrap)    barWrap.style.display = total ? '' : 'none';
+
   m.checklist.forEach((item, i) => {
     const row = document.createElement('div');
     row.className = 'checklist-row' + (item.done ? ' done' : '');
     row.innerHTML = `
-      <input type="checkbox" class="checklist-check" ${item.done ? 'checked' : ''} />
-      <input type="text" class="checklist-text" value="${escHtml(item.text)}" />
-      <button class="checklist-del" title="삭제">×</button>
+      <button type="button" class="checklist-box" aria-label="${item.done ? '완료 해제' : '완료'}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+      </button>
+      <input type="text" class="checklist-text" value="${escHtml(item.text)}" placeholder="항목 입력..." />
+      <button class="checklist-del" title="삭제" aria-label="삭제">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg>
+      </button>
     `;
-    row.querySelector('.checklist-check').addEventListener('change', e => {
-      m.checklist[i].done = e.target.checked;
+    row.querySelector('.checklist-box').addEventListener('click', () => {
+      m.checklist[i].done = !m.checklist[i].done;
       renderChecklist();
     });
     row.querySelector('.checklist-text').addEventListener('input', e => {
@@ -148,6 +172,13 @@ function renderChecklist() {
       if (e.key === 'Enter') {
         e.preventDefault();
         document.getElementById('checklistInput').focus();
+      } else if (e.key === 'Backspace' && !e.target.value) {
+        e.preventDefault();
+        m.checklist.splice(i, 1);
+        renderChecklist();
+        // Focus previous item if exists, else the add input.
+        const prev = list.querySelectorAll('.checklist-text')[i - 1];
+        (prev || document.getElementById('checklistInput')).focus();
       }
     });
     row.querySelector('.checklist-del').addEventListener('click', () => {
@@ -192,6 +223,9 @@ export function initModal() {
       renderTagPills();
     }
   });
+
+  // Notes textarea auto-grows as user types.
+  document.getElementById('mDesc').addEventListener('input', e => autoResize(e.target));
 
   document.getElementById('checklistInput').addEventListener('keydown', e => {
     if (e.key === 'Enter') {

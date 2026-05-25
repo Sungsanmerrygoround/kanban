@@ -108,8 +108,8 @@
     </div>
 
     <div class="field">
-      <label class="field-label">설명 (선택)</label>
-      <textarea class="field-input" id="mDesc" placeholder="세부 내용을 입력하세요..."></textarea>
+      <label class="field-label">노트</label>
+      <textarea class="field-input notes-input" id="mDesc" placeholder="세부 내용, 메모, 링크 등을 자유롭게 적어보세요..." rows="6"></textarea>
     </div>
 
     <div class="field">
@@ -134,9 +134,16 @@
     </div>
 
     <div class="field">
-      <label class="field-label">체크리스트</label>
+      <div class="checklist-header">
+        <label class="field-label" style="margin-bottom:0;">체크리스트</label>
+        <div class="checklist-progress" id="checklistProgress"></div>
+      </div>
+      <div class="checklist-bar" id="checklistBar"><div class="checklist-bar-fill" id="checklistBarFill"></div></div>
       <div class="checklist-list" id="checklistList"></div>
-      <input class="field-input checklist-input" id="checklistInput" type="text" placeholder="항목 추가 후 Enter..." />
+      <div class="checklist-add">
+        <span class="checklist-add-icon">+</span>
+        <input class="checklist-add-input" id="checklistInput" type="text" placeholder="새 항목 추가" />
+      </div>
     </div>
 
     <div class="field">
