@@ -206,6 +206,21 @@ export function findCard(cardId) {
   return null;
 }
 
+// Cross-project lookup — used by global search.
+export function findCardAnywhere(cardId) {
+  for (const p of state.projects) {
+    for (const col of p.columns) {
+      const card = col.cards.find(c => c.id === cardId);
+      if (card) return { card, col, project: p };
+    }
+  }
+  return null;
+}
+
+export function setActiveProject(id) {
+  if (state.projects.find(p => p.id === id)) state.activeProjectId = id;
+}
+
 // ── Search filter ───────────────────────────────────────────────────────────
 export function matchesSearch(card) {
   if (!filter.query) return true;

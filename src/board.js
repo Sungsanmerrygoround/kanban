@@ -1,12 +1,13 @@
 // Board area: column rendering + column CRUD (add / delete / rename).
 
 import {
-  activeProject, activeColumns, getColById, matchesSearch, filter,
-  save, COL_COLORS,
+  state, activeProject, activeColumns, getColById, matchesSearch, filter,
+  save, setActiveProject, COL_COLORS,
 } from './state.js';
 import { uid, escHtml } from './utils.js';
 import { refreshAll } from './refresh.js';
 import { buildCard, setupDropZone, openQuickForm, closeQuickForm, submitQuickForm } from './cards.js';
+import { openModal } from './modal.js';
 
 // ── Render ──────────────────────────────────────────────────────────────────
 export function renderBoard() {
@@ -14,6 +15,12 @@ export function renderBoard() {
   const scrollLeft = board.scrollLeft;
   board.innerHTML = '';
 
+  if (filter.query) {
+    renderSearchResults(board);
+    return;
+  }
+
+  board.classList.remove('search-mode');
   activeColumns().forEach(col => board.appendChild(buildColumn(col)));
 
   // "+ 컬럼 추가" tail button
@@ -24,6 +31,79 @@ export function renderBoard() {
   board.appendChild(addBtn);
 
   board.scrollLeft = scrollLeft;
+}
+
+// ── Cross-project search results ────────────────────────────────────────────
+function renderSearchResults(board) {
+  board.classList.add('search-mode');
+
+  const wrap = document.createElement('div');
+  wrap.className = 'search-results';
+
+  let totalHits = 0;
+  state.projects.forEach(project => {
+    const hits = [];
+    for (const col of project.columns) {
+      for (const card of col.cards) {
+        if (card.archived) continue;
+        if (matchesSearch(card)) hits.push({ card, col });
+      }
+    }
+    if (hits.length === 0) return;
+    totalHits += hits.length;
+
+    const section = document.createElement('div');
+    section.className = 'search-section';
+    section.innerHTML = `
+      <div class="search-section-head">
+        <span class="search-section-icon">${escHtml(project.icon || '📁')}</span>
+        <span class="search-section-name">${escHtml(project.name)}</span>
+        <span class="search-section-count">${hits.length}</span>
+      </div>
+    `;
+    const list = document.createElement('div');
+    list.className = 'search-section-list';
+    hits.forEach(({ card, col }) => list.appendChild(buildSearchCard(card, col, project)));
+    section.appendChild(list);
+    wrap.appendChild(section);
+  });
+
+  if (totalHits === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'search-empty';
+    empty.innerHTML = `
+      <div class="search-empty-icon">🔍</div>
+      <div class="search-empty-title">검색 결과가 없습니다</div>
+      <div class="search-empty-sub">"${escHtml(filter.query)}" 와 일치하는 카드를 찾지 못했어요.</div>
+    `;
+    wrap.appendChild(empty);
+  }
+
+  board.appendChild(wrap);
+}
+
+function buildSearchCard(card, col, project) {
+  // Reuse the normal card markup but disable drag and add a project/column label.
+  const el = buildCard(card);
+  el.classList.add('search-card');
+
+  const meta = document.createElement('div');
+  meta.className = 'search-card-loc';
+  meta.innerHTML = `<span class="loc-col">${escHtml(col.title)}</span>`;
+  el.insertBefore(meta, el.firstChild);
+
+  // Replace click: jump to that project + open the card.
+  const fresh = el.cloneNode(true);
+  fresh.addEventListener('click', () => {
+    setActiveProject(project.id);
+    // Clear search so the project board renders normally.
+    filter.query = '';
+    const input = document.getElementById('searchInput');
+    if (input) input.value = '';
+    refreshAll();
+    openModal(card.id);
+  });
+  return fresh;
 }
 
 function buildColumn(col) {
