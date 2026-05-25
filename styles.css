@@ -21,11 +21,11 @@
   --card-border: #e6e5e2;
   --card-border-hover: #d3d2cf;
 
-  --accent: #2e7d5b;
-  --accent-strong: #246347;
-  --accent-dim: rgba(46,125,91,0.10);
-  --radius: 8px;
-  --card-radius: 6px;
+  --accent: #0a0a0a;
+  --accent-strong: #000000;
+  --accent-dim: rgba(0,0,0,0.06);
+  --radius: 10px;
+  --card-radius: 8px;
 }
 
 body {
@@ -119,16 +119,17 @@ body {
   position: relative;
 }
 
-.project-item:hover { background: rgba(15,30,22,0.05); }
+.project-item:hover { background: rgba(0,0,0,0.04); }
 
 .project-item.active {
-  background: var(--accent);
-  color: #fff;
+  background: rgba(0,0,0,0.06);
+  color: var(--text);
+  font-weight: 600;
 }
 
 .project-item.active .project-count {
-  background: rgba(255,255,255,0.22);
-  color: #fff;
+  background: rgba(0,0,0,0.08);
+  color: var(--text);
 }
 
 .project-icon {
@@ -152,7 +153,8 @@ body {
 }
 
 .project-name[contenteditable="true"] {
-  background: rgba(255,255,255,0.18);
+  background: #ffffff;
+  box-shadow: 0 0 0 1px var(--border2);
   overflow: visible;
   white-space: normal;
 }
@@ -190,8 +192,8 @@ body {
 
 .project-item:hover .project-delete { opacity: 0.55; }
 .project-item:hover .project-count { display: none; }
-.project-delete:hover { opacity: 1 !important; background: rgba(0,0,0,0.1); }
-.project-item.active .project-delete:hover { background: rgba(255,255,255,0.22); }
+.project-delete:hover { opacity: 1 !important; background: rgba(0,0,0,0.08); }
+.project-item.active .project-delete:hover { background: rgba(0,0,0,0.1); }
 
 .add-project-btn {
   margin: 0.6rem 0.6rem 0.8rem;
@@ -250,16 +252,16 @@ body {
 }
 
 .logo-mark {
-  width: 30px;
-  height: 30px;
-  border-radius: 9px;
-  background: linear-gradient(135deg, #10a37f 0%, #34c759 50%, #84cc16 100%);
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #1a1a1a 0%, #3a3a3a 100%);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 15px;
+  font-size: 14px;
   color: #fff;
-  box-shadow: 0 0 0 1px rgba(16,163,127,0.35), 0 6px 16px rgba(16,163,127,0.28);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.18);
 }
 
 .divider { width: 1px; height: 24px; background: var(--border2); margin: 0 0.25rem; }
@@ -301,11 +303,11 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  padding: 0.38rem 0.85rem;
+  padding: 0.42rem 0.85rem;
   border-radius: 7px;
-  border: 1px solid var(--border2);
-  background: transparent;
-  color: var(--muted2);
+  border: 1px solid var(--border);
+  background: #ffffff;
+  color: var(--text);
   font-size: 0.78rem;
   font-weight: 500;
   cursor: pointer;
@@ -313,14 +315,14 @@ body {
   font-family: inherit;
   white-space: nowrap;
 }
-.btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+.btn:hover { border-color: var(--border2); background: var(--surface); color: var(--text); }
 
 .btn-primary {
   background: var(--accent);
   border-color: var(--accent);
   color: #fff;
 }
-.btn-primary:hover { background: var(--accent-strong); border-color: var(--accent-strong); color: #fff; box-shadow: 0 4px 12px rgba(16,163,127,0.22); }
+.btn-primary:hover { background: var(--accent-strong); border-color: var(--accent-strong); color: #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.18); }
 
 /* ── Board ─────────────────────────────────────────────────────────────── */
 .board {
@@ -340,16 +342,17 @@ body {
   width: 296px;
   flex-shrink: 0;
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 1px solid transparent;
   border-radius: var(--radius);
   display: flex;
   flex-direction: column;
   max-height: calc(100vh - 56px - 2.5rem);
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
 }
 .column.drag-over {
   border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent), 0 0 24px rgba(99,102,241,0.15);
+  background: var(--surface2);
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.08);
 }
 
 .col-header {
@@ -441,22 +444,23 @@ body {
 
 /* ── Card ──────────────────────────────────────────────────────────────── */
 .card {
-  background: var(--card-bg);
+  background: #ffffff;
   border: 1px solid var(--card-border);
   border-radius: var(--card-radius);
-  padding: 0.8rem 0.95rem;
+  padding: 0.85rem 1rem;
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s, box-shadow 0.15s, transform 0.1s, opacity 0.15s;
   position: relative;
   border-left: 3px solid var(--card-border);
   user-select: none;
   color: var(--card-text);
+  box-shadow: 0 1px 2px rgba(15,15,15,0.04);
 }
 .card:hover {
-  background: var(--card-bg-hover);
+  background: #ffffff;
   border-color: var(--card-border-hover);
   border-left-color: inherit;
-  box-shadow: 0 2px 6px rgba(15,15,15,0.06);
+  box-shadow: 0 4px 12px rgba(15,15,15,0.08);
   transform: translateY(-1px);
 }
 .card.dragging { opacity: 0.4; transform: scale(0.97); }
@@ -1104,16 +1108,16 @@ body.dragging-active .card { cursor: grabbing; }
   align-items: center;
   gap: 0.25rem;
   padding: 0.15rem 0.5rem;
-  background: rgba(16, 163, 127, 0.1);
-  color: var(--accent-strong);
-  border-radius: 6px;
+  background: var(--surface2);
+  color: var(--muted2);
+  border-radius: 5px;
   font-size: 0.72rem;
   font-weight: 600;
 }
 .checklist-badge svg { width: 11px; height: 11px; }
 .checklist-badge.done {
-  background: rgba(16, 163, 127, 0.22);
-  color: var(--accent-strong);
+  background: #1a1a1a;
+  color: #fff;
 }
 
 /* ── Archive button (modal footer) ───────────────────────────────────────── */
