@@ -272,7 +272,7 @@ function buildSpanBar({ span, lane, dayStart, dayEnd }, weekStartTm, weekEndTm) 
     e.stopPropagation();
     jumpToCard(card.id, project.id);
   });
-  bar.addEventListener('pointerdown', (e) => onBarPointerDown(e, card, project, bar));
+  bar.addEventListener('pointerdown', (e) => initDrag(e, card, project, bar));
 
   // Hover cursor cue: show ew-resize over the start/end day of the span so the
   // user discovers the resize affordance. Light math, no DOM lookups.
@@ -333,13 +333,12 @@ function collectAllCards() {
 }
 
 // ── Chip (single-day or tray) ───────────────────────────────────────────────
-function buildChip(card, project, spanRole = 'single') {
+function buildChip(card, project) {
   const chip = document.createElement('div');
   const pri = card.priority && card.priority !== 'none' ? ` p-${card.priority}` : '';
-  chip.className = `cal-chip span-${spanRole}${pri}`;
+  chip.className = `cal-chip${pri}`;
   chip.dataset.cardId = card.id;
   chip.dataset.projectId = project.id;
-  chip.dataset.spanRole = spanRole;
 
   const icon = (scope === 'all')
     ? `<span class="cal-chip-icon">${escHtml(project.icon || '📁')}</span>`
@@ -354,64 +353,10 @@ function buildChip(card, project, spanRole = 'single') {
     e.stopPropagation();
     jumpToCard(card.id, project.id);
   });
-  chip.addEventListener('pointerdown', (e) => onChipPointerDown(e, card, project, chip));
+  chip.addEventListener('pointerdown', (e) => initDrag(e, card, project, chip));
   return chip;
 }
 
-// Span-bar pointerdown — role is determined by which DAY of the span the user
-// pressed on:
-//   pressed day === card.start  → 'start'  (resize start)
-//   pressed day === card.due    → 'end'    (resize end)
-//   else                          → 'bar'   (shift whole range)
-// "continues-left/right" weeks: pressing the visible edge does NOT match the
-// real start/end date, so naturally falls back to 'bar' (correct).
-function onBarPointerDown(e, card, project, barEl) {
-  if (drag) return;
-  if (e.button !== undefined && e.button !== 0) return;
-
-  // Identify the cell directly under the press (the day the user actually clicked).
-  const prev = barEl.style.pointerEvents;
-  barEl.style.pointerEvents = 'none';
-  const under = document.elementFromPoint(e.clientX, e.clientY);
-  barEl.style.pointerEvents = prev;
-  const cell = under && under.closest('.cal-day-cell');
-  const chipDate = cell ? cell.dataset.date : null;
-
-  let role = 'bar';
-  if (chipDate === card.start)    role = 'start';
-  else if (chipDate === card.due) role = 'end';
-
-  drag = {
-    cardId: card.id,
-    projectId: project.id,
-    chipEl: barEl,
-    chipDate,
-    spanRole: role,
-    // Snapshot original geometry so we can restore on cancel + drive live preview.
-    origLeft:  barEl.style.left,
-    origWidth: barEl.style.width,
-    origCardStart: card.start,
-    origCardDue:   card.due,
-    pointerId: e.pointerId,
-    pointerType: e.pointerType,
-    startX: e.clientX,
-    startY: e.clientY,
-    offsetX: 0,
-    offsetY: 0,
-    started: false,
-    ghost: null,
-    targetDate: null,
-    longPressTimer: null,
-  };
-  if (e.pointerType === 'touch') {
-    drag.longPressTimer = setTimeout(() => {
-      if (drag && !drag.started) startChipDrag(drag.startX, drag.startY);
-    }, TOUCH_LONG_PRESS);
-  }
-  window.addEventListener('pointermove', onChipPointerMove);
-  window.addEventListener('pointerup', onChipPointerUp);
-  window.addEventListener('pointercancel', onChipPointerUp);
-}
 
 function jumpToCard(cardId, projectId) {
   // Close any open day-detail popover first.
@@ -503,22 +448,50 @@ function buildNoDueTray() {
   return tray;
 }
 
-// ── Pointer drag (chip → reschedule) ────────────────────────────────────────
-function onChipPointerDown(e, card, project, chipEl) {
+// ── Pointer drag ─────────────────────────────────────────────────────────────
+// Unified handler for both span bars and single-day chips.
+//
+// Span bars (.cal-span-bar):
+//   • Temporarily hides itself so elementFromPoint finds the cell underneath.
+//   • Role = 'start' / 'end' when pressing the first / last day of the span;
+//     'bar' otherwise (shifts the whole range).
+//   • "continues-left/right" weeks: the visible edge isn't the real start/end
+//     date, so the comparison naturally falls back to 'bar' — correct.
+//
+// Single-day chips (.cal-chip):
+//   • Role = 'single' — always reschedules the due date.
+//   • chipDate is null for chips in the no-due tray (assigned on drop).
+function initDrag(e, card, project, el) {
   if (drag) return;
   if (e.button !== undefined && e.button !== 0) return;
 
-  // Day the chip is rendered on (null for chips in the no-due tray).
-  const cell = chipEl.closest('.cal-day-cell');
-  const chipDate = cell ? cell.dataset.date : null;
-  const spanRole = chipEl.dataset.spanRole || 'single';
+  let chipDate, spanRole, origLeft, origWidth;
+
+  if (el.classList.contains('cal-span-bar')) {
+    el.style.pointerEvents = 'none';
+    const under = document.elementFromPoint(e.clientX, e.clientY);
+    el.style.pointerEvents = '';
+    const cell = under && under.closest('.cal-day-cell');
+    chipDate = cell ? cell.dataset.date : null;
+    spanRole = chipDate === card.start ? 'start'
+             : chipDate === card.due   ? 'end'
+             : 'bar';
+    origLeft  = el.style.left;
+    origWidth = el.style.width;
+  } else {
+    const cell = el.closest('.cal-day-cell');
+    chipDate = cell ? cell.dataset.date : null;
+    spanRole = 'single';
+  }
 
   drag = {
     cardId: card.id,
     projectId: project.id,
-    chipEl,
+    chipEl: el,
     chipDate,
     spanRole,
+    origLeft,
+    origWidth,
     pointerId: e.pointerId,
     pointerType: e.pointerType,
     startX: e.clientX,
@@ -536,9 +509,8 @@ function onChipPointerDown(e, card, project, chipEl) {
       if (drag && !drag.started) startChipDrag(drag.startX, drag.startY);
     }, TOUCH_LONG_PRESS);
   }
-
   window.addEventListener('pointermove', onChipPointerMove);
-  window.addEventListener('pointerup', onChipPointerUp);
+  window.addEventListener('pointerup',   onChipPointerUp);
   window.addEventListener('pointercancel', onChipPointerUp);
 }
 

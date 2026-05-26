@@ -4,7 +4,7 @@
 import { load, save, applyRemote, filter, setUser } from './state.js';
 import { refreshAll, setView } from './refresh.js';
 import { addProject } from './sidebar.js';
-import { addColumn, renderBoard } from './board.js';
+import { addColumn } from './board.js';
 import { initModal, closeModal } from './modal.js';
 import { initArchive, closeArchive } from './archive.js';
 import { initAuth, onUserChange } from './auth.js';

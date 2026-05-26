@@ -3,7 +3,7 @@
 import {
   save, getColById, findCard, tagColor, state,
 } from './state.js';
-import { uid, escHtml, dueStatus, formatDue, displayTitle } from './utils.js';
+import { uid, escHtml, dueStatus, formatDue, displayTitle, RECURRENCE_LABELS } from './utils.js';
 import { refreshAll } from './refresh.js';
 import { openModal } from './modal.js';
 
@@ -43,7 +43,7 @@ export function buildCard(card) {
     : '';
 
   const recurBadge = (card.recurrence && card.recurrence !== 'none')
-    ? `<span class="recur-badge" title="반복: ${RECUR_LABELS[card.recurrence] || ''}">🔁</span>`
+    ? `<span class="recur-badge" title="반복: ${RECURRENCE_LABELS[card.recurrence] || ''}">🔁</span>`
     : '';
 
   // Show desc as plain text (first 2 lines via CSS), stripped of markdown markers
@@ -65,10 +65,6 @@ export function buildCard(card) {
 
   return el;
 }
-
-// setupDropZone is no longer needed — pointer logic uses elementFromPoint.
-// Kept as a no-op so board.js doesn't need to know.
-export function setupDropZone() { /* noop */ }
 
 // ── Pointer drag pipeline ───────────────────────────────────────────────────
 function onPointerDown(e, card, cardEl) {
@@ -323,7 +319,6 @@ function clearPlaceholders() {
 
 const PRIORITY_LABELS = { high: '높음', medium: '중간', low: '낮음' };
 const PRIORITY_COLORS = { high: 'red', medium: 'yellow', low: 'green' };
-const RECUR_LABELS = { daily: '매일', weekly: '매주', monthly: '매월' };
 
 function stripMarkdown(s) {
   return s

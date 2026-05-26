@@ -6,7 +6,7 @@ import {
 } from './state.js';
 import { uid, escHtml } from './utils.js';
 import { refreshAll } from './refresh.js';
-import { buildCard, setupDropZone, openQuickForm, closeQuickForm, submitQuickForm } from './cards.js';
+import { buildCard, openQuickForm, closeQuickForm, submitQuickForm } from './cards.js';
 import { openModal } from './modal.js';
 
 // ── Render ──────────────────────────────────────────────────────────────────
@@ -140,7 +140,6 @@ function buildColumn(col) {
     area.appendChild(empty);
   }
   visibleCards.forEach(card => area.appendChild(buildCard(card)));
-  setupDropZone(area, col.id);
   el.appendChild(area);
 
   // Add-card area
