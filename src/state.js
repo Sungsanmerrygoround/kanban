@@ -146,7 +146,7 @@ export function undo() {
   Object.keys(tagColorMap).forEach(k => delete tagColorMap[k]);
   Object.assign(tagColorMap, prev.tagColorMap);
   tagIdx = prev.tagIdx;
-  saveLocal();
+  save();   // sync the revert to the cloud too (no-op push when offline/local build)
   return true;
 }
 
@@ -158,7 +158,7 @@ export function redo() {
   Object.keys(tagColorMap).forEach(k => delete tagColorMap[k]);
   Object.assign(tagColorMap, next.tagColorMap);
   tagIdx = next.tagIdx;
-  saveLocal();
+  save();   // sync the revert to the cloud too (no-op push when offline/local build)
   return true;
 }
 
