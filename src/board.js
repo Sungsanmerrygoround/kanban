@@ -150,7 +150,7 @@ function buildColumn(col) {
         <option value="">템플릿에서 시작 (선택)</option>
         ${templates.map(t => `<option value="${t.id}">${escHtml(t.name)}</option>`).join('')}
       </select>
-      <button class="qf-tpl-delete" title="선택한 템플릿 삭제">×</button>
+      <button class="qf-tpl-delete" title="선택한 템플릿 삭제">🗑 삭제</button>
     </div>
   ` : '';
 
@@ -184,15 +184,18 @@ function buildColumn(col) {
   addArea.querySelector('.add-card-btn').addEventListener('click', () => openQuickForm(col.id));
   addArea.querySelector('.qa-add').addEventListener('click', () => submitQuickForm(col.id));
   addArea.querySelector('.qa-cancel').addEventListener('click', () => closeQuickForm(col.id));
+  const tplSel = addArea.querySelector('.qf-template');
   const tplDelBtn = addArea.querySelector('.qf-tpl-delete');
-  if (tplDelBtn) {
+  if (tplSel && tplDelBtn) {
+    tplSel.addEventListener('change', () => {
+      tplDelBtn.classList.toggle('visible', !!tplSel.value);
+    });
     tplDelBtn.addEventListener('click', () => {
-      const sel = addArea.querySelector('.qf-template');
-      if (!sel || !sel.value) return;
-      const tpl = (state.templates || []).find(t => t.id === sel.value);
+      if (!tplSel.value) return;
+      const tpl = (state.templates || []).find(t => t.id === tplSel.value);
       if (!tpl) return;
       if (!confirm(`"${tpl.name}" 템플릿을 삭제할까요?`)) return;
-      state.templates = state.templates.filter(t => t.id !== sel.value);
+      state.templates = state.templates.filter(t => t.id !== tplSel.value);
       save();
       refreshAll();
     });

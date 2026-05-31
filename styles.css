@@ -1700,13 +1700,12 @@ textarea.field-input { resize: vertical; min-height: 80px; line-height: 1.5; }
 /* Template selector in quick-form */
 .qf-template-row {
   display: flex;
-  align-items: center;
-  gap: 0.35rem;
+  flex-direction: column;
+  gap: 0.3rem;
   margin-bottom: 0.45rem;
 }
 .qf-template {
-  flex: 1;
-  min-width: 0;
+  width: 100%;
   padding: 0.4rem 0.55rem;
   font: inherit;
   font-size: 0.78rem;
@@ -1718,22 +1717,21 @@ textarea.field-input { resize: vertical; min-height: 80px; line-height: 1.5; }
 }
 .qf-template:focus { outline: none; border-color: var(--border2); }
 .qf-tpl-delete {
-  flex-shrink: 0;
-  width: 1.6rem;
-  height: 1.6rem;
-  border: 1px solid var(--border);
+  display: none;
+  width: 100%;
+  padding: 0.3rem 0.55rem;
+  border: 1px solid rgba(239,68,68,0.35);
   border-radius: 6px;
-  background: #ffffff;
-  color: var(--text2);
-  font-size: 0.95rem;
-  line-height: 1;
+  background: #fff5f5;
+  color: #ef4444;
+  font: inherit;
+  font-size: 0.75rem;
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: border-color 0.15s, color 0.15s;
+  text-align: left;
+  transition: background 0.15s;
 }
-.qf-tpl-delete:hover { border-color: #ef4444; color: #ef4444; }
+.qf-tpl-delete.visible { display: block; }
+.qf-tpl-delete:hover { background: #fee2e2; }
 
 .btn-danger {
   padding: 0.45rem 0.75rem;
