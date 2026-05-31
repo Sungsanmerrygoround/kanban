@@ -2,9 +2,9 @@
 
 import {
   state, activeProject, activeColumns, getColById, matchesSearch, filter,
-  save, setActiveProject, COL_COLORS,
+  save, setActiveProject, COL_COLORS, pushUndo,
 } from './state.js';
-import { uid, escHtml } from './utils.js';
+import { uid, escHtml, MOUSE_THRESHOLD } from './utils.js';
 import { refreshAll } from './refresh.js';
 import { buildCard, openQuickForm, closeQuickForm, submitQuickForm } from './cards.js';
 import { openModal } from './modal.js';
@@ -56,7 +56,6 @@ function renderSearchResults(board) {
     section.className = 'search-section';
     section.innerHTML = `
       <div class="search-section-head">
-        <span class="search-section-icon">${escHtml(project.icon || '📁')}</span>
         <span class="search-section-name">${escHtml(project.name)}</span>
         <span class="search-section-count">${hits.length}</span>
       </div>
@@ -84,7 +83,7 @@ function renderSearchResults(board) {
 
 function buildSearchCard(card, col, project) {
   // Reuse the normal card markup but disable drag and add a project/column label.
-  const el = buildCard(card);
+  const el = buildCard(card, project.id);
   el.classList.add('search-card');
 
   const meta = document.createElement('div');
@@ -139,14 +138,15 @@ function buildColumn(col) {
     empty.textContent = '카드를 추가하세요';
     area.appendChild(empty);
   }
-  visibleCards.forEach(card => area.appendChild(buildCard(card)));
+  const projId = activeProject().id;
+  visibleCards.forEach(card => area.appendChild(buildCard(card, projId)));
   el.appendChild(area);
 
   // Add-card area
   const templates = (state.templates || []);
   const tplSelectHtml = templates.length ? `
     <select class="qf-template" data-col-id="${col.id}">
-      <option value="">📋 템플릿에서 시작 (선택)</option>
+      <option value="">템플릿에서 시작 (선택)</option>
       ${templates.map(t => `<option value="${t.id}">${escHtml(t.name)}</option>`).join('')}
     </select>
   ` : '';
@@ -167,6 +167,7 @@ function buildColumn(col) {
   el.appendChild(addArea);
 
   // Wire column-scope events
+  hdr.addEventListener('pointerdown', (e) => onColHeaderPointerDown(e, col));
   hdr.querySelector('.col-title').addEventListener('dblclick', startRenameCol);
   hdr.querySelector('.col-title').addEventListener('keydown', e => {
     if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
@@ -192,6 +193,7 @@ function buildColumn(col) {
 export function addColumn() {
   const cols = activeColumns();
   const color = COL_COLORS[cols.length % COL_COLORS.length];
+  pushUndo();
   cols.push({ id: uid(), title: '새 컬럼', color, cards: [] });
   save();
   refreshAll();
@@ -216,6 +218,7 @@ function deleteColumn(colId) {
       !confirm(`"${col.title}" 컬럼과 카드 ${col.cards.length}개를 삭제할까요?`)) {
     return;
   }
+  pushUndo();
   activeProject().columns = activeColumns().filter(c => c.id !== colId);
   save();
   refreshAll();
@@ -251,4 +254,153 @@ function divider() {
 
 function plusIcon() {
   return `<svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>`;
+}
+
+// ── Column drag-to-reorder ───────────────────────────────────────────────────
+let colDrag = null;
+
+function onColHeaderPointerDown(e, col) {
+  if (colDrag) return;
+  if (e.button !== undefined && e.button !== 0) return;
+  if (e.target.closest('.col-delete')) return;
+  const titleEl = e.target.closest('.col-title');
+  if (titleEl && titleEl.contentEditable === 'true') return;
+
+  colDrag = {
+    colId:             col.id,
+    pointerId:         e.pointerId,
+    startX:            e.clientX,
+    startY:            e.clientY,
+    started:           false,
+    ghost:             null,
+    colEl:             e.currentTarget.closest('.column'),
+    insertBeforeColId: null,
+    offsetX:           0,
+    offsetY:           0,
+  };
+
+  window.addEventListener('pointermove',   onColPointerMove);
+  window.addEventListener('pointerup',     onColPointerUp);
+  window.addEventListener('pointercancel', onColPointerUp);
+}
+
+function onColPointerMove(e) {
+  if (!colDrag || e.pointerId !== colDrag.pointerId) return;
+  const dx = e.clientX - colDrag.startX;
+  const dy = e.clientY - colDrag.startY;
+
+  if (!colDrag.started) {
+    if (Math.hypot(dx, dy) > MOUSE_THRESHOLD) startColDrag(e.clientX, e.clientY);
+    return;
+  }
+
+  e.preventDefault();
+  moveColGhost(e.clientX, e.clientY);
+  updateColDropTarget(e.clientX);
+  colAutoScroll(e.clientX);
+}
+
+function startColDrag(x, y) {
+  const rect = colDrag.colEl.getBoundingClientRect();
+  colDrag.offsetX = colDrag.startX - rect.left;
+  colDrag.offsetY = colDrag.startY - rect.top;
+  colDrag.started = true;
+
+  const ghost = colDrag.colEl.cloneNode(true);
+  ghost.classList.add('col-ghost');
+  ghost.style.width = rect.width + 'px';
+  document.body.appendChild(ghost);
+  colDrag.ghost = ghost;
+
+  colDrag.colEl.classList.add('dragging-col');
+  document.body.classList.add('dragging-active');
+
+  try { colDrag.colEl.setPointerCapture(colDrag.pointerId); } catch (_) {}
+
+  moveColGhost(x, y);
+  updateColDropTarget(x);
+}
+
+function moveColGhost(x, y) {
+  colDrag.ghost.style.left = (x - colDrag.offsetX) + 'px';
+  colDrag.ghost.style.top  = (y - colDrag.offsetY) + 'px';
+}
+
+function updateColDropTarget(x) {
+  clearColPlaceholders();
+  const board = document.getElementById('board');
+  const cols  = [...board.querySelectorAll('.column:not(.dragging-col)')];
+
+  let insertBefore = null;
+  for (const c of cols) {
+    const r = c.getBoundingClientRect();
+    if (x < r.left + r.width / 2) { insertBefore = c; break; }
+  }
+
+  const ph = document.createElement('div');
+  ph.className = 'col-ph';
+  // Match the dragged column's actual width (avoids 272 vs 296 mismatch).
+  const w = colDrag.colEl?.getBoundingClientRect().width;
+  if (w) ph.style.width = w + 'px';
+
+  if (insertBefore) {
+    board.insertBefore(ph, insertBefore);
+    colDrag.insertBeforeColId = insertBefore.dataset.colId;
+  } else {
+    const addBtn = board.querySelector('.add-col-btn');
+    addBtn ? board.insertBefore(ph, addBtn) : board.appendChild(ph);
+    colDrag.insertBeforeColId = null;
+  }
+}
+
+function colAutoScroll(x) {
+  const board = document.getElementById('board');
+  const r = board.getBoundingClientRect();
+  const margin = 80;
+  if (x - r.left < margin)       board.scrollLeft -= 16;
+  else if (r.right - x < margin) board.scrollLeft += 16;
+}
+
+function onColPointerUp(e) {
+  if (!colDrag || e.pointerId !== colDrag.pointerId) return;
+  if (colDrag.started) performColDrop();
+  cleanupColDrag();
+}
+
+function performColDrop() {
+  const cols   = activeColumns();
+  const srcIdx = cols.findIndex(c => c.id === colDrag.colId);
+  if (srcIdx < 0) return;
+
+  pushUndo();
+  const [col] = cols.splice(srcIdx, 1);
+
+  if (colDrag.insertBeforeColId === null) {
+    cols.push(col);
+  } else {
+    const dstIdx = cols.findIndex(c => c.id === colDrag.insertBeforeColId);
+    cols.splice(dstIdx < 0 ? cols.length : dstIdx, 0, col);
+  }
+
+  activeProject().columns = cols;
+  save();
+  refreshAll();
+}
+
+function cleanupColDrag() {
+  if (colDrag) {
+    if (colDrag.ghost) colDrag.ghost.remove();
+    if (colDrag.colEl) colDrag.colEl.classList.remove('dragging-col');
+    try { colDrag.colEl.releasePointerCapture(colDrag.pointerId); } catch (_) {}
+  }
+  document.body.classList.remove('dragging-active');
+  clearColPlaceholders();
+  window.removeEventListener('pointermove',   onColPointerMove);
+  window.removeEventListener('pointerup',     onColPointerUp);
+  window.removeEventListener('pointercancel', onColPointerUp);
+  colDrag = null;
+}
+
+function clearColPlaceholders() {
+  document.querySelectorAll('.col-ph').forEach(p => p.remove());
 }

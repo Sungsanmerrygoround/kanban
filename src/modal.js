@@ -2,13 +2,22 @@
 // Also handles: recurrence, duplicate, save-as-template, markdown preview, image paste.
 
 import {
-  save, findCard, getColById, activeColumns, activeProject, tagColor, state,
+  save, findCard, getColById, activeColumns, activeProject, tagColor, state, pushUndo,
 } from './state.js';
 import { escHtml, renderMarkdown, compressImageBlob, nextDueDate } from './utils.js';
 import { refreshAll } from './refresh.js';
 import { uid } from './utils.js';
 
 // ── Per-open state ──────────────────────────────────────────────────────────
+// Note page state
+const np = {
+  cardId:    null,
+  fromModal: false,
+  priority:  'none',
+  tags:      [],
+  viewMode:  'edit',
+};
+
 const m = {
   cardId: null,
   colId: null,
@@ -40,7 +49,7 @@ export function openModal(cardId) {
   // Eyebrow: project · column
   const proj = (typeof activeProject === 'function' && activeProject()) || null;
   document.getElementById('mEyebrow').textContent =
-    (proj ? `${proj.icon || '📁'} ${proj.name}` : '') + (col ? ` · ${col.title}` : '');
+    (proj ? proj.name : '') + (col ? ` · ${col.title}` : '');
 
   const sel = document.getElementById('mColSelect');
   sel.innerHTML = activeColumns().map(c =>
@@ -113,6 +122,7 @@ function saveModal() {
   const newColId = document.getElementById('mColSelect').value;
   const { card, col: srcCol } = result;
 
+  pushUndo();
   Object.assign(card, form);
 
   if (newColId !== srcCol.id) {
@@ -148,6 +158,7 @@ function archiveCard() {
     col.cards.push(next);
   }
 
+  pushUndo();
   card.archived  = true;
   card.archivedAt = new Date().toISOString();
   save();
@@ -159,6 +170,7 @@ function deleteCard() {
   if (!m.cardId) return;
   if (!confirm('이 카드를 완전히 삭제할까요? (아카이브로 보내려면 "아카이브" 버튼을 쓰세요)')) return;
   const { col } = findCard(m.cardId);
+  pushUndo();
   col.cards = col.cards.filter(c => c.id !== m.cardId);
   save();
   refreshAll();
@@ -216,7 +228,7 @@ function saveAsTemplate() {
   flashMsg('템플릿으로 저장됨');
 }
 
-function flashMsg(text) {
+export function flashMsg(text) {
   let el = document.getElementById('flashMsg');
   if (!el) {
     el = document.createElement('div');
@@ -278,7 +290,10 @@ function insertAtCursor(ta, text) {
   ta.value = ta.value.slice(0, start) + text + ta.value.slice(end);
   const pos = start + text.length;
   ta.selectionStart = ta.selectionEnd = pos;
-  autoResize(ta);
+  // np-editor fills its parent; auto-resize is for the modal mDesc only.
+  if (!ta.classList.contains('np-editor')) autoResize(ta);
+  // Trigger input event so listeners (e.g. split-mode preview) update.
+  ta.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
 // ── Pills (priority + tags) ─────────────────────────────────────────────────
@@ -408,7 +423,25 @@ export function initModal() {
   desc.addEventListener('input', e => autoResize(e.target));
   desc.addEventListener('paste', handlePaste);
 
-  document.getElementById('checklistInput').addEventListener('keydown', e => {
+  const clInput = document.getElementById('checklistInput');
+
+  // Clicking the + icon: add item if input has text, otherwise focus input
+  document.querySelector('.checklist-add-icon').addEventListener('click', () => {
+    const v = clInput.value.trim();
+    if (v) {
+      m.checklist.push({ text: v, done: false });
+      clInput.value = '';
+      renderChecklist();
+    }
+    clInput.focus();
+  });
+
+  // Clicking anywhere in the add row focuses the input
+  document.querySelector('.checklist-add').addEventListener('click', (e) => {
+    if (e.target !== clInput) clInput.focus();
+  });
+
+  clInput.addEventListener('keydown', e => {
     if (e.key === 'Enter') {
       const v = e.target.value.trim();
       if (!v) return;
@@ -416,6 +449,224 @@ export function initModal() {
       m.checklist.push({ text: v, done: false });
       e.target.value = '';
       renderChecklist();
+      clInput.focus();
+    }
+  });
+
+  // Expand to full-screen note page
+  document.getElementById('notesExpand').addEventListener('click', () => {
+    if (!m.cardId) return;
+    // Flush in-progress modal edits (incl. checklist/recurrence which the note
+    // page doesn't surface) to the card so they aren't lost on round-trip.
+    const result = findCard(m.cardId);
+    if (result) {
+      const form = readForm();
+      if (form.title) Object.assign(result.card, form);
+    }
+    openNotePage(m.cardId, true);
+    closeModal();
+  });
+}
+
+// ── Full-screen Note Page ────────────────────────────────────────────────────
+export function openNotePage(cardId, fromModal = false) {
+  const result = findCard(cardId);
+  if (!result) return;
+  const { card, col } = result;
+
+  np.cardId    = cardId;
+  np.fromModal = fromModal;
+  np.priority  = fromModal ? m.priority : card.priority;
+  np.tags      = fromModal ? [...m.tags] : [...(card.tags || [])];
+  np.viewMode  = 'edit';
+
+  // Prefer modal's live values when coming from modal
+  const title = fromModal
+    ? (document.getElementById('mTitle').value || card.title)
+    : card.title;
+  const desc = fromModal
+    ? document.getElementById('mDesc').value
+    : (card.desc || '');
+  const due = fromModal
+    ? (document.getElementById('mDue').value || card.due || '')
+    : (card.due || '');
+
+  document.getElementById('npTitle').value  = title;
+  document.getElementById('npEditor').value = desc;
+  document.getElementById('npDue').value    = due;
+
+  const proj = activeProject();
+  document.getElementById('npBreadcrumb').textContent =
+    (proj ? proj.name : '') + (col ? ` · ${col.title}` : '');
+
+  const sel = document.getElementById('npColSelect');
+  sel.innerHTML = activeColumns().map(c =>
+    `<option value="${c.id}" ${c.id === col.id ? 'selected' : ''}>${escHtml(c.title)}</option>`
+  ).join('');
+
+  renderNpPriorityPills();
+  renderNpTags();
+  setNpViewMode('edit');
+
+  document.getElementById('notePageOverlay').classList.add('open');
+  document.getElementById('npEditor').focus();
+}
+
+function saveNotePageData() {
+  if (!np.cardId) return false;
+  const result = findCard(np.cardId);
+  if (!result) return false;
+  const { card, col: srcCol } = result;
+
+  const title = document.getElementById('npTitle').value.trim();
+  if (!title) { document.getElementById('npTitle').focus(); return false; }
+
+  const desc     = document.getElementById('npEditor').value;
+  const due      = document.getElementById('npDue').value || '';
+  const newColId = document.getElementById('npColSelect').value;
+
+  pushUndo();
+  card.title    = title;
+  card.desc     = desc;
+  card.due      = due;
+  card.priority = np.priority;
+  card.tags     = [...np.tags];
+
+  if (newColId !== srcCol.id) {
+    srcCol.cards = srcCol.cards.filter(c => c.id !== np.cardId);
+    getColById(newColId).cards.push(card);
+  }
+
+  save();
+  refreshAll();
+  return true;
+}
+
+function closeNotePage() {
+  const cardId    = np.cardId;
+  const fromModal = np.fromModal;
+  document.getElementById('notePageOverlay').classList.remove('open');
+  np.cardId    = null;
+  np.fromModal = false;
+
+  if (fromModal && cardId) {
+    // Re-open modal so user can continue editing other fields
+    openModal(cardId);
+  }
+}
+
+function setNpViewMode(mode) {
+  np.viewMode = mode;
+  const area    = document.getElementById('npEditorArea');
+  const editor  = document.getElementById('npEditor');
+  const preview = document.getElementById('npPreviewPane');
+
+  area.className = 'np-editor-area mode-' + mode;
+
+  if (mode === 'edit') {
+    editor.style.display  = '';
+    preview.style.display = 'none';
+  } else if (mode === 'preview') {
+    editor.style.display  = 'none';
+    preview.style.display = '';
+    preview.innerHTML = renderMarkdown(editor.value) ||
+      '<div class="np-empty-preview">내용 없음</div>';
+  } else { // split
+    editor.style.display  = '';
+    preview.style.display = '';
+    preview.innerHTML = renderMarkdown(editor.value) ||
+      '<div class="np-empty-preview">내용 없음</div>';
+  }
+
+  document.querySelectorAll('.np-vb').forEach(b =>
+    b.classList.toggle('active', b.dataset.mode === mode)
+  );
+}
+
+function renderNpPriorityPills() {
+  document.querySelectorAll('.np-pri-pill').forEach(p => {
+    p.className = 'np-pri-pill' +
+      (p.dataset.p === np.priority ? ` sel-${np.priority}` : '');
+  });
+}
+
+function renderNpTags() {
+  const box = document.getElementById('npTagsBox');
+  const txt = document.getElementById('npTagsText');
+  box.innerHTML = '';
+  np.tags.forEach((tag, i) => {
+    const pill = document.createElement('div');
+    pill.className = `tag-pill c-${tagColor(tag)}`;
+    pill.innerHTML = `${escHtml(tag)}<button data-i="${i}">×</button>`;
+    pill.querySelector('button').addEventListener('click', ev => {
+      ev.stopPropagation();
+      np.tags.splice(i, 1);
+      renderNpTags();
+    });
+    box.appendChild(pill);
+  });
+  box.appendChild(txt);
+  txt.value = '';
+}
+
+export function initNotePage() {
+  document.getElementById('npBack').addEventListener('click', () => {
+    // If save fails (e.g. empty title), don't close — keep user in the editor.
+    if (!saveNotePageData()) return;
+    closeNotePage();
+  });
+
+  document.getElementById('npSave').addEventListener('click', () => {
+    if (saveNotePageData()) flashMsg('저장됨 ✓');
+  });
+
+  // View mode buttons
+  document.querySelectorAll('.np-vb').forEach(b =>
+    b.addEventListener('click', () => setNpViewMode(b.dataset.mode))
+  );
+
+  // Priority pills
+  document.querySelectorAll('.np-pri-pill').forEach(p =>
+    p.addEventListener('click', () => {
+      np.priority = p.dataset.p;
+      renderNpPriorityPills();
+    })
+  );
+
+  // Tags
+  document.getElementById('npTagsBox').addEventListener('click', () =>
+    document.getElementById('npTagsText').focus()
+  );
+  document.getElementById('npTagsText').addEventListener('keydown', e => {
+    const v = e.target.value.trim();
+    if ((e.key === 'Enter' || e.key === ',') && v) {
+      e.preventDefault();
+      const clean = v.replace(/,/g, '');
+      if (clean && !np.tags.includes(clean)) np.tags.push(clean);
+      renderNpTags();
+    } else if (e.key === 'Backspace' && !e.target.value && np.tags.length) {
+      np.tags.pop();
+      renderNpTags();
+    }
+  });
+
+  // Image paste
+  document.getElementById('npEditor').addEventListener('paste', handlePaste);
+
+  // Live preview in split mode
+  document.getElementById('npEditor').addEventListener('input', () => {
+    if (np.viewMode === 'split') {
+      const p = document.getElementById('npPreviewPane');
+      p.innerHTML = renderMarkdown(document.getElementById('npEditor').value) ||
+        '<div class="np-empty-preview">내용 없음</div>';
+    }
+  });
+
+  // Ctrl+S / ⌘S to save
+  document.getElementById('notePageOverlay').addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      e.preventDefault();
+      if (saveNotePageData()) flashMsg('저장됨 ✓');
     }
   });
 }

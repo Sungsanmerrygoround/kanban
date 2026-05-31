@@ -1,9 +1,12 @@
-// Calendar view: month grid showing cards by due date, with drag-to-reschedule.
+﻿// Calendar view: month grid showing cards by due date, with drag-to-reschedule.
 
 import {
-  state, findCardAnywhere, setActiveProject, save,
+  state, findCardAnywhere, setActiveProject, save, pushUndo, projectHue,
 } from './state.js';
-import { escHtml, displayTitle } from './utils.js';
+import {
+  escHtml, displayTitle, ymd,
+  MOUSE_THRESHOLD, TOUCH_LONG_PRESS, TOUCH_CANCEL_DIST,
+} from './utils.js';
 import { openModal } from './modal.js';
 import { refreshAll } from './refresh.js';
 
@@ -13,10 +16,7 @@ let viewYear, viewMonth;             // viewMonth is 0-indexed
 let scope = localStorage.getItem(SCOPE_KEY) || 'all';
 
 // ── Drag state ──────────────────────────────────────────────────────────────
-let drag = null;
-const MOUSE_THRESHOLD   = 5;
-const TOUCH_LONG_PRESS  = 250;
-const TOUCH_CANCEL_DIST = 10;
+let calDrag = null;
 
 // ── Render ──────────────────────────────────────────────────────────────────
 export function renderCalendar() {
@@ -53,7 +53,7 @@ function buildHeader() {
       <select id="calScope" aria-label="범위 선택">
         <option value="all" ${scope === 'all' ? 'selected' : ''}>모든 프로젝트</option>
         ${state.projects.map(p =>
-          `<option value="${p.id}" ${scope === p.id ? 'selected' : ''}>${escHtml((p.icon || '📁') + ' ' + p.name)}</option>`
+          `<option value="${p.id}" ${scope === p.id ? 'selected' : ''}>${escHtml(p.name)}</option>`
         ).join('')}
       </select>
     </div>
@@ -252,19 +252,14 @@ function buildSpanBar({ span, lane, dayStart, dayEnd }, weekStartTm, weekEndTm) 
   bar.dataset.cardId    = card.id;
   bar.dataset.projectId = project.id;
   bar.dataset.spanRole  = 'bar';
+  bar.style.setProperty('--ph', projectHue(project.id));
 
   // Geometry: each lane is 22px tall, sitting under the date number area.
   bar.style.left  = (dayStart / 7 * 100) + '%';
   bar.style.width = ((dayEnd - dayStart + 1) / 7 * 100) + '%';
   bar.style.top   = `calc(var(--date-num-h) + ${lane} * (var(--lane-h) + var(--lane-gap)))`;
 
-  const icon = (scope === 'all')
-    ? `<span class="cal-chip-icon">${escHtml(project.icon || '📁')}</span>`
-    : '';
-  const recur = (card.recurrence && card.recurrence !== 'none')
-    ? `<span class="cal-chip-recur" title="반복">🔁</span>` : '';
-
-  bar.innerHTML = `${icon}<span class="cal-bar-title">${escHtml(displayTitle(card.title))}</span>${recur}`;
+  bar.innerHTML = `<span class="cal-bar-title">${escHtml(displayTitle(card.title))}</span>`;
   bar.dataset.dayCount = String(dayEnd - dayStart + 1);
 
   bar.addEventListener('click', (e) => {
@@ -277,7 +272,7 @@ function buildSpanBar({ span, lane, dayStart, dayEnd }, weekStartTm, weekEndTm) 
   // Hover cursor cue: show ew-resize over the start/end day of the span so the
   // user discovers the resize affordance. Light math, no DOM lookups.
   bar.addEventListener('mousemove', (e) => {
-    if (drag) return;
+    if (calDrag) return;
     const rect = bar.getBoundingClientRect();
     const offsetX = e.clientX - rect.left;
     const days = parseInt(bar.dataset.dayCount, 10) || 1;
@@ -340,13 +335,8 @@ function buildChip(card, project) {
   chip.dataset.cardId = card.id;
   chip.dataset.projectId = project.id;
 
-  const icon = (scope === 'all')
-    ? `<span class="cal-chip-icon">${escHtml(project.icon || '📁')}</span>`
-    : '';
-  const recur = (card.recurrence && card.recurrence !== 'none')
-    ? `<span class="cal-chip-recur" title="반복">🔁</span>` : '';
-
-  chip.innerHTML = `${icon}<span class="cal-chip-title">${escHtml(displayTitle(card.title))}</span>${recur}`;
+  chip.innerHTML = `<span class="cal-chip-title">${escHtml(displayTitle(card.title))}</span>`;
+  chip.style.setProperty('--ph', projectHue(project.id));
 
   chip.addEventListener('click', (e) => {
     if (chip.dataset.suppressClick) return;
@@ -354,6 +344,14 @@ function buildChip(card, project) {
     jumpToCard(card.id, project.id);
   });
   chip.addEventListener('pointerdown', (e) => initDrag(e, card, project, chip));
+  // Show ew-resize cursor on left/right 28% of chip so user discovers extend affordance
+  chip.addEventListener('mousemove', (e) => {
+    if (calDrag) return;
+    const rect = chip.getBoundingClientRect();
+    const rel  = e.clientX - rect.left;
+    chip.style.cursor = (rel < rect.width * 0.28 || rel > rect.width * 0.72) ? 'ew-resize' : 'pointer';
+  });
+  chip.addEventListener('mouseleave', () => { chip.style.cursor = ''; });
   return chip;
 }
 
@@ -400,7 +398,7 @@ function openDayDetail(dateStr, cards) {
       <div class="cal-day-row-stripe${pri}"></div>
       <div class="cal-day-row-main">
         <div class="cal-day-row-title">${escHtml(displayTitle(card.title))}</div>
-        <div class="cal-day-row-meta">${escHtml((project.icon || '📁') + ' ' + project.name)}</div>
+        <div class="cal-day-row-meta">${escHtml(project.name)}</div>
       </div>
     `;
     row.addEventListener('click', () => jumpToCard(card.id, project.id));
@@ -448,7 +446,7 @@ function buildNoDueTray() {
   return tray;
 }
 
-// ── Pointer drag ─────────────────────────────────────────────────────────────
+// ── Pointer calDrag ─────────────────────────────────────────────────────────────
 // Unified handler for both span bars and single-day chips.
 //
 // Span bars (.cal-span-bar):
@@ -462,7 +460,7 @@ function buildNoDueTray() {
 //   • Role = 'single' — always reschedules the due date.
 //   • chipDate is null for chips in the no-due tray (assigned on drop).
 function initDrag(e, card, project, el) {
-  if (drag) return;
+  if (calDrag) return;
   if (e.button !== undefined && e.button !== 0) return;
 
   let chipDate, spanRole, origLeft, origWidth;
@@ -481,10 +479,18 @@ function initDrag(e, card, project, el) {
   } else {
     const cell = el.closest('.cal-day-cell');
     chipDate = cell ? cell.dataset.date : null;
-    spanRole = 'single';
+    if (cell && chipDate) {
+      const rect = el.getBoundingClientRect();
+      const rel  = e.clientX - rect.left;
+      if (rel < rect.width * 0.28)      spanRole = 'start';
+      else if (rel > rect.width * 0.72) spanRole = 'end';
+      else                              spanRole = 'single';
+    } else {
+      spanRole = 'single'; // tray chip — no resize
+    }
   }
 
-  drag = {
+  calDrag = {
     cardId: card.id,
     projectId: project.id,
     chipEl: el,
@@ -505,8 +511,8 @@ function initDrag(e, card, project, el) {
   };
 
   if (e.pointerType === 'touch') {
-    drag.longPressTimer = setTimeout(() => {
-      if (drag && !drag.started) startChipDrag(drag.startX, drag.startY);
+    calDrag.longPressTimer = setTimeout(() => {
+      if (calDrag && !calDrag.started) startChipDrag(calDrag.startX, calDrag.startY);
     }, TOUCH_LONG_PRESS);
   }
   window.addEventListener('pointermove', onChipPointerMove);
@@ -515,15 +521,15 @@ function initDrag(e, card, project, el) {
 }
 
 function onChipPointerMove(e) {
-  if (!drag || e.pointerId !== drag.pointerId) return;
-  const dx = e.clientX - drag.startX;
-  const dy = e.clientY - drag.startY;
+  if (!calDrag || e.pointerId !== calDrag.pointerId) return;
+  const dx = e.clientX - calDrag.startX;
+  const dy = e.clientY - calDrag.startY;
   const dist = Math.hypot(dx, dy);
 
-  if (!drag.started) {
-    if (drag.pointerType === 'touch') {
+  if (!calDrag.started) {
+    if (calDrag.pointerType === 'touch') {
       if (dist > TOUCH_CANCEL_DIST) {
-        clearTimeout(drag.longPressTimer);
+        clearTimeout(calDrag.longPressTimer);
         chipCleanup();
       }
     } else if (dist > MOUSE_THRESHOLD) {
@@ -533,64 +539,75 @@ function onChipPointerMove(e) {
   }
 
   e.preventDefault();
-  if (drag.ghost) moveChipGhost(e.clientX, e.clientY);
+  if (calDrag.ghost) moveChipGhost(e.clientX, e.clientY);
   updateChipDropTarget(e.clientX, e.clientY);
 }
 
 function startChipDrag(x, y) {
-  drag.started = true;
+  calDrag.started = true;
   document.body.classList.add('dragging-active');
 
-  const isResize = drag.spanRole === 'start' || drag.spanRole === 'end';
+  const isResize = calDrag.spanRole === 'start' || calDrag.spanRole === 'end';
 
   if (!isResize) {
-    const rect = drag.chipEl.getBoundingClientRect();
-    drag.offsetX = drag.startX - rect.left;
-    drag.offsetY = drag.startY - rect.top;
-    const ghost = drag.chipEl.cloneNode(true);
+    const rect = calDrag.chipEl.getBoundingClientRect();
+    calDrag.offsetX = calDrag.startX - rect.left;
+    calDrag.offsetY = calDrag.startY - rect.top;
+    const ghost = calDrag.chipEl.cloneNode(true);
     ghost.classList.add('cal-chip-ghost');
     ghost.style.width = rect.width + 'px';
     ghost.style.left = '';   // clear inline % from span bars so fixed-pos px works
     ghost.style.top  = '';
     document.body.appendChild(ghost);
-    drag.ghost = ghost;
+    calDrag.ghost = ghost;
     moveChipGhost(x, y);
   }
 
-  drag.chipEl.classList.add(isResize ? 'resizing' : 'dragging');
+  // For resize: hide sibling bars of the same card so elementFromPoint
+  // can see the day cells underneath during cross-week drags.
+  if (isResize) {
+    const cardId = calDrag.cardId;
+    document.querySelectorAll('.cal-span-bar').forEach(b => {
+      if (b !== calDrag.chipEl && b.dataset.cardId === cardId) {
+        b.style.pointerEvents = 'none';
+      }
+    });
+  }
+
+  calDrag.chipEl.classList.add(isResize ? 'resizing' : 'dragging');
   document.body.dataset.dragMode = isResize ? 'resize' : 'shift';
 
-  try { drag.chipEl.setPointerCapture(drag.pointerId); } catch {}
+  try { calDrag.chipEl.setPointerCapture(calDrag.pointerId); } catch {}
   updateChipDropTarget(x, y);
-  if (drag.pointerType === 'touch' && navigator.vibrate) navigator.vibrate(15);
+  if (calDrag.pointerType === 'touch' && navigator.vibrate) navigator.vibrate(15);
 }
 
 function moveChipGhost(x, y) {
-  drag.ghost.style.left = (x - drag.offsetX) + 'px';
-  drag.ghost.style.top  = (y - drag.offsetY) + 'px';
+  calDrag.ghost.style.left = (x - calDrag.offsetX) + 'px';
+  calDrag.ghost.style.top  = (y - calDrag.offsetY) + 'px';
 }
 
 function updateChipDropTarget(x, y) {
   // Temporarily hide whatever follows the pointer (ghost if shift, the bar
   // itself if resize) so hit-testing finds the cell underneath.
-  const hiddenEl = drag.ghost || drag.chipEl;
+  const hiddenEl = calDrag.ghost || calDrag.chipEl;
   const prevDisp = hiddenEl.style.display;
   const prevPe   = hiddenEl.style.pointerEvents;
-  if (drag.ghost) hiddenEl.style.display = 'none';
+  if (calDrag.ghost) hiddenEl.style.display = 'none';
   else            hiddenEl.style.pointerEvents = 'none';
   const el = document.elementFromPoint(x, y);
-  if (drag.ghost) hiddenEl.style.display = prevDisp;
+  if (calDrag.ghost) hiddenEl.style.display = prevDisp;
   else            hiddenEl.style.pointerEvents = prevPe;
 
   document.querySelectorAll('.cal-day-cell.drag-over').forEach(c => c.classList.remove('drag-over'));
 
   const cell = el && el.closest('.cal-day-cell');
-  if (!cell) { drag.targetDate = null; return; }
+  if (!cell) { calDrag.targetDate = null; return; }
   cell.classList.add('drag-over');
-  drag.targetDate = cell.dataset.date;
+  calDrag.targetDate = cell.dataset.date;
 
   // Live preview for in-week resize: visually move the bar's start/end edge.
-  if (drag.spanRole === 'start' || drag.spanRole === 'end') {
+  if (calDrag.spanRole === 'start' || calDrag.spanRole === 'end') {
     liveResizePreview(cell);
   }
 }
@@ -600,13 +617,14 @@ function updateChipDropTarget(x, y) {
 // Cross-week drops fall back to cell-highlight only (the bar will redraw
 // across multiple weeks after refreshAll on drop).
 function liveResizePreview(targetCell) {
-  if (!drag || !drag.chipEl) return;
-  const barWeek    = drag.chipEl.closest('.cal-week');
+  if (!calDrag || !calDrag.chipEl) return;
+  if (!calDrag.origLeft) return;   // chip-based resize: no % geometry to preview
+  const barWeek    = calDrag.chipEl.closest('.cal-week');
   const targetWeek = targetCell.closest('.cal-week');
   if (barWeek !== targetWeek) {
     // Different week — restore original geometry visually.
-    drag.chipEl.style.left  = drag.origLeft;
-    drag.chipEl.style.width = drag.origWidth;
+    calDrag.chipEl.style.left  = calDrag.origLeft;
+    calDrag.chipEl.style.width = calDrag.origWidth;
     return;
   }
   const cells = [...barWeek.querySelectorAll('.cal-day-cell')];
@@ -614,31 +632,31 @@ function liveResizePreview(targetCell) {
   if (targetIdx < 0) return;
 
   // Decode current bar geometry from inline %.
-  const left  = parseFloat(drag.origLeft);                 // e.g. 28.57
-  const width = parseFloat(drag.origWidth);                 // e.g. 42.85
+  const left  = parseFloat(calDrag.origLeft);                 // e.g. 28.57
+  const width = parseFloat(calDrag.origWidth);                 // e.g. 42.85
   const COL = 100 / 7;
   let dayStart = Math.round(left / COL);
   let dayEnd   = dayStart + Math.round(width / COL) - 1;
 
-  if (drag.spanRole === 'start') {
+  if (calDrag.spanRole === 'start') {
     dayStart = Math.min(targetIdx, dayEnd);
-  } else if (drag.spanRole === 'end') {
+  } else if (calDrag.spanRole === 'end') {
     dayEnd   = Math.max(targetIdx, dayStart);
   }
-  drag.chipEl.style.left  = (dayStart * COL) + '%';
-  drag.chipEl.style.width = ((dayEnd - dayStart + 1) * COL) + '%';
+  calDrag.chipEl.style.left  = (dayStart * COL) + '%';
+  calDrag.chipEl.style.width = ((dayEnd - dayStart + 1) * COL) + '%';
 }
 
 function onChipPointerUp(e) {
-  if (!drag || e.pointerId !== drag.pointerId) return;
-  clearTimeout(drag.longPressTimer);
+  if (!calDrag || e.pointerId !== calDrag.pointerId) return;
+  clearTimeout(calDrag.longPressTimer);
 
-  if (drag.started) {
-    const applied = !!drag.targetDate;
-    if (applied) applyDrop(drag);
+  if (calDrag.started) {
+    const applied = !!calDrag.targetDate;
+    if (applied) applyDrop(calDrag);
     // Block the synthetic click that follows.
-    drag.chipEl.dataset.suppressClick = '1';
-    const chip = drag.chipEl;
+    calDrag.chipEl.dataset.suppressClick = '1';
+    const chip = calDrag.chipEl;
     setTimeout(() => delete chip.dataset.suppressClick, 300);
     chipCleanup(applied);
     if (applied) refreshAll();
@@ -648,18 +666,23 @@ function onChipPointerUp(e) {
 }
 
 function chipCleanup(dropApplied) {
-  if (drag) {
-    if (drag.ghost) drag.ghost.remove();
-    if (drag.chipEl) drag.chipEl.classList.remove('dragging', 'resizing');
-    try { drag.chipEl.releasePointerCapture(drag.pointerId); } catch {}
+  if (calDrag) {
+    if (calDrag.ghost) calDrag.ghost.remove();
+    if (calDrag.chipEl) calDrag.chipEl.classList.remove('dragging', 'resizing');
+    try { calDrag.chipEl.releasePointerCapture(calDrag.pointerId); } catch {}
 
     // If a resize was previewed but not applied (cancel / no target), revert.
     if (!dropApplied
-        && (drag.spanRole === 'start' || drag.spanRole === 'end')
-        && drag.origLeft != null) {
-      drag.chipEl.style.left  = drag.origLeft;
-      drag.chipEl.style.width = drag.origWidth;
+        && (calDrag.spanRole === 'start' || calDrag.spanRole === 'end')
+        && calDrag.origLeft != null) {
+      calDrag.chipEl.style.left  = calDrag.origLeft;
+      calDrag.chipEl.style.width = calDrag.origWidth;
     }
+
+    // Restore pointer events on any sibling bars that were disabled for hit-testing.
+    document.querySelectorAll('.cal-span-bar').forEach(b => {
+      b.style.pointerEvents = '';
+    });
   }
   document.body.classList.remove('dragging-active');
   delete document.body.dataset.dragMode;
@@ -667,7 +690,7 @@ function chipCleanup(dropApplied) {
   window.removeEventListener('pointermove', onChipPointerMove);
   window.removeEventListener('pointerup', onChipPointerUp);
   window.removeEventListener('pointercancel', onChipPointerUp);
-  drag = null;
+  calDrag = null;
 }
 
 // Apply the drop:
@@ -680,14 +703,26 @@ function applyDrop(d) {
   const r = findCardAnywhere(d.cardId);
   if (!r) return;
   const c = r.card;
+  pushUndo();
 
   if (!d.chipDate && d.spanRole !== 'start' && d.spanRole !== 'end') {
     if (c.due !== d.targetDate) { c.due = d.targetDate; c.start = ''; save(); }
     return;
   }
   if (!c.start || c.start === c.due) {
-    // Single-day card — straight reschedule.
-    if (c.due !== d.targetDate) { c.due = d.targetDate; save(); }
+    if (d.spanRole === 'single') {
+      // Plain reschedule (move).
+      if (c.due !== d.targetDate) { c.due = d.targetDate; save(); }
+      return;
+    }
+    // Edge-calDrag on a single-day chip: extend into a multi-day span.
+    if (d.spanRole === 'start') {
+      const s = d.targetDate < c.due ? d.targetDate : c.due;
+      if (s !== c.due) { c.start = s; save(); }
+    } else if (d.spanRole === 'end') {
+      const e = d.targetDate > c.due ? d.targetDate : c.due;
+      if (e !== c.due) { c.start = c.due; c.due = e; save(); }
+    }
     return;
   }
 
@@ -725,14 +760,6 @@ function addDaysISO(dateStr, delta) {
   const d = new Date(dateStr + 'T00:00:00');
   d.setDate(d.getDate() + delta);
   return ymd(d);
-}
-
-// ── Helpers ─────────────────────────────────────────────────────────────────
-function ymd(d) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
 }
 
 // ── Keyboard nav (left/right = month) ───────────────────────────────────────

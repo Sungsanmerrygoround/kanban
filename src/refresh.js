@@ -4,6 +4,7 @@
 import { renderSidebar, renderNavbarTitle } from './sidebar.js';
 import { renderBoard } from './board.js';
 import { renderCalendar } from './calendar.js';
+import { renderTimeline } from './timeline.js';
 import { filter } from './state.js';
 
 const VIEW_KEY = 'kb_view_mode';
@@ -13,12 +14,13 @@ applyBodyClass();
 function applyBodyClass() {
   document.body.classList.toggle('view-calendar', viewMode === 'calendar');
   document.body.classList.toggle('view-board',    viewMode === 'board');
+  document.body.classList.toggle('view-timeline', viewMode === 'timeline');
 }
 
 export function getView() { return viewMode; }
 
 export function setView(v) {
-  viewMode = (v === 'calendar') ? 'calendar' : 'board';
+  viewMode = (['calendar', 'timeline'].includes(v)) ? v : 'board';
   localStorage.setItem(VIEW_KEY, viewMode);
   applyBodyClass();
   refreshAll();
@@ -35,6 +37,7 @@ export function refreshAll() {
   renderNavbarTitle();
   // Search always falls back to the board view's cross-project search results.
   if (filter.query || viewMode === 'board') renderBoard();
-  else renderCalendar();
+  else if (viewMode === 'calendar') renderCalendar();
+  else renderTimeline();
   syncToggleUI();
 }

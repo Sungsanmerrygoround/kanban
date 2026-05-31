@@ -1,22 +1,23 @@
-// Card rendering, inline add form, pointer-based drag & drop (mouse + touch).
+﻿// Card rendering, inline add form, pointer-based boardDrag & drop (mouse + touch).
 
 import {
-  save, getColById, findCard, tagColor, state,
+  save, getColById, findCard, tagColor, state, pushUndo, projectHue,
 } from './state.js';
-import { uid, escHtml, dueStatus, formatDue, displayTitle, RECURRENCE_LABELS } from './utils.js';
+import {
+  uid, escHtml, dueStatus, formatDue, displayTitle, RECURRENCE_LABELS,
+  MOUSE_THRESHOLD, TOUCH_LONG_PRESS, TOUCH_CANCEL_DIST,
+} from './utils.js';
 import { refreshAll } from './refresh.js';
 import { openModal } from './modal.js';
 
 // ── Drag state (per-session, in-memory only) ────────────────────────────────
-let drag = null;
-const MOUSE_THRESHOLD = 5;   // px before mouse drag starts
-const TOUCH_LONG_PRESS = 250; // ms hold before touch drag starts
-const TOUCH_CANCEL_DIST = 10; // px finger movement that cancels the long-press
+let boardDrag = null;
 
 // ── Build ───────────────────────────────────────────────────────────────────
-export function buildCard(card) {
+export function buildCard(card, projectId) {
   const el = document.createElement('div');
   const status = dueStatus(card);
+  if (projectId != null) el.style.setProperty('--ph', projectHue(projectId));
 
   let cls = 'card';
   if (card.priority !== 'none')           cls += ' p-' + card.priority;
@@ -66,15 +67,15 @@ export function buildCard(card) {
   return el;
 }
 
-// ── Pointer drag pipeline ───────────────────────────────────────────────────
+// ── Pointer boardDrag pipeline ───────────────────────────────────────────────────
 function onPointerDown(e, card, cardEl) {
-  if (drag) return;
+  if (boardDrag) return;
   if (e.button !== undefined && e.button !== 0) return; // left mouse only
   // Ignore touch starts on interactive children (none for now, but future-proof)
   const result = findCard(card.id);
   if (!result) return;
 
-  drag = {
+  boardDrag = {
     cardId: card.id,
     srcColId: result.col.id,
     cardEl,
@@ -92,8 +93,8 @@ function onPointerDown(e, card, cardEl) {
   };
 
   if (e.pointerType === 'touch') {
-    drag.longPressTimer = setTimeout(() => {
-      if (drag && !drag.started) startDrag(drag.startX, drag.startY);
+    boardDrag.longPressTimer = setTimeout(() => {
+      if (boardDrag && !boardDrag.started) startDrag(boardDrag.startX, boardDrag.startY);
     }, TOUCH_LONG_PRESS);
   }
 
@@ -103,16 +104,16 @@ function onPointerDown(e, card, cardEl) {
 }
 
 function onPointerMove(e) {
-  if (!drag || e.pointerId !== drag.pointerId) return;
-  const dx = e.clientX - drag.startX;
-  const dy = e.clientY - drag.startY;
+  if (!boardDrag || e.pointerId !== boardDrag.pointerId) return;
+  const dx = e.clientX - boardDrag.startX;
+  const dy = e.clientY - boardDrag.startY;
   const dist = Math.hypot(dx, dy);
 
-  if (!drag.started) {
-    if (drag.pointerType === 'touch') {
-      // Movement before long-press fires ⇒ user is scrolling, abort drag.
+  if (!boardDrag.started) {
+    if (boardDrag.pointerType === 'touch') {
+      // Movement before long-press fires ⇒ user is scrolling, abort boardDrag.
       if (dist > TOUCH_CANCEL_DIST) {
-        clearTimeout(drag.longPressTimer);
+        clearTimeout(boardDrag.longPressTimer);
         cleanup(false);
       }
     } else if (dist > MOUSE_THRESHOLD) {
@@ -128,56 +129,56 @@ function onPointerMove(e) {
 }
 
 function startDrag(x, y) {
-  const rect = drag.cardEl.getBoundingClientRect();
-  drag.offsetX = drag.startX - rect.left;
-  drag.offsetY = drag.startY - rect.top;
-  drag.started = true;
+  const rect = boardDrag.cardEl.getBoundingClientRect();
+  boardDrag.offsetX = boardDrag.startX - rect.left;
+  boardDrag.offsetY = boardDrag.startY - rect.top;
+  boardDrag.started = true;
 
-  const ghost = drag.cardEl.cloneNode(true);
+  const ghost = boardDrag.cardEl.cloneNode(true);
   ghost.classList.add('drag-ghost');
   ghost.style.width = rect.width + 'px';
   document.body.appendChild(ghost);
-  drag.ghost = ghost;
+  boardDrag.ghost = ghost;
 
-  drag.cardEl.classList.add('dragging');
+  boardDrag.cardEl.classList.add('dragging');
   document.body.classList.add('dragging-active');
 
   // Lock pointer to the card so we keep receiving moves even off-element.
-  try { drag.cardEl.setPointerCapture(drag.pointerId); } catch (_) { /* ignore */ }
+  try { boardDrag.cardEl.setPointerCapture(boardDrag.pointerId); } catch (_) { /* ignore */ }
 
   moveGhost(x, y);
   updateDropTarget(x, y);
 
-  if (drag.pointerType === 'touch' && navigator.vibrate) navigator.vibrate(15);
+  if (boardDrag.pointerType === 'touch' && navigator.vibrate) navigator.vibrate(15);
 }
 
 function moveGhost(x, y) {
-  drag.ghost.style.left = (x - drag.offsetX) + 'px';
-  drag.ghost.style.top  = (y - drag.offsetY) + 'px';
+  boardDrag.ghost.style.left = (x - boardDrag.offsetX) + 'px';
+  boardDrag.ghost.style.top  = (y - boardDrag.offsetY) + 'px';
 }
 
 function updateDropTarget(x, y) {
   // Hide the ghost so it doesn't intercept the hit test.
-  const prev = drag.ghost.style.display;
-  drag.ghost.style.display = 'none';
+  const prev = boardDrag.ghost.style.display;
+  boardDrag.ghost.style.display = 'none';
   const el = document.elementFromPoint(x, y);
-  drag.ghost.style.display = prev;
+  boardDrag.ghost.style.display = prev;
 
   clearPlaceholders();
   document.querySelectorAll('.column.drag-over').forEach(c => c.classList.remove('drag-over'));
 
   const area = el && el.closest('.cards-area');
-  if (!area) { drag.targetColId = null; drag.afterCardId = null; return; }
+  if (!area) { boardDrag.targetColId = null; boardDrag.afterCardId = null; return; }
 
   area.closest('.column').classList.add('drag-over');
-  drag.targetColId = area.dataset.colId;
+  boardDrag.targetColId = area.dataset.colId;
 
   const ph = document.createElement('div');
   ph.className = 'drop-ph';
   const after = afterElementAt(area, y);
   if (after == null) area.appendChild(ph);
   else area.insertBefore(ph, after);
-  drag.afterCardId = after ? after.dataset.cardId : null;
+  boardDrag.afterCardId = after ? after.dataset.cardId : null;
 }
 
 function autoScrollBoard(x) {
@@ -189,14 +190,14 @@ function autoScrollBoard(x) {
 }
 
 function onPointerUp(e) {
-  if (!drag || e.pointerId !== drag.pointerId) return;
-  clearTimeout(drag.longPressTimer);
+  if (!boardDrag || e.pointerId !== boardDrag.pointerId) return;
+  clearTimeout(boardDrag.longPressTimer);
 
-  if (drag.started) {
+  if (boardDrag.started) {
     performDrop();
     // Block the synthetic click that follows pointerup so the modal doesn't open.
-    drag.cardEl.dataset.suppressClick = '1';
-    const cardEl = drag.cardEl;
+    boardDrag.cardEl.dataset.suppressClick = '1';
+    const cardEl = boardDrag.cardEl;
     setTimeout(() => delete cardEl.dataset.suppressClick, 300);
     cleanup(true);
   } else {
@@ -205,19 +206,20 @@ function onPointerUp(e) {
 }
 
 function performDrop() {
-  if (!drag.targetColId) return;
-  const srcCol = getColById(drag.srcColId);
+  if (!boardDrag.targetColId) return;
+  const srcCol = getColById(boardDrag.srcColId);
   if (!srcCol) return;
-  const idx = srcCol.cards.findIndex(c => c.id === drag.cardId);
+  const idx = srcCol.cards.findIndex(c => c.id === boardDrag.cardId);
   if (idx < 0) return;
 
+  pushUndo();
   const [card] = srcCol.cards.splice(idx, 1);
-  const dstCol = getColById(drag.targetColId);
+  const dstCol = getColById(boardDrag.targetColId);
 
-  if (drag.afterCardId == null) {
+  if (boardDrag.afterCardId == null) {
     dstCol.cards.push(card);
   } else {
-    const i = dstCol.cards.findIndex(c => c.id === drag.afterCardId);
+    const i = dstCol.cards.findIndex(c => c.id === boardDrag.afterCardId);
     dstCol.cards.splice(i < 0 ? dstCol.cards.length : i, 0, card);
   }
 
@@ -226,10 +228,10 @@ function performDrop() {
 }
 
 function cleanup(_dropped) {
-  if (drag) {
-    if (drag.ghost) drag.ghost.remove();
-    if (drag.cardEl) drag.cardEl.classList.remove('dragging');
-    try { drag.cardEl.releasePointerCapture(drag.pointerId); } catch (_) {}
+  if (boardDrag) {
+    if (boardDrag.ghost) boardDrag.ghost.remove();
+    if (boardDrag.cardEl) boardDrag.cardEl.classList.remove('dragging');
+    try { boardDrag.cardEl.releasePointerCapture(boardDrag.pointerId); } catch (_) {}
   }
   document.body.classList.remove('dragging-active');
   document.querySelectorAll('.column.drag-over').forEach(c => c.classList.remove('drag-over'));
@@ -237,7 +239,7 @@ function cleanup(_dropped) {
   window.removeEventListener('pointermove', onPointerMove);
   window.removeEventListener('pointerup', onPointerUp);
   window.removeEventListener('pointercancel', onPointerUp);
-  drag = null;
+  boardDrag = null;
 }
 
 // ── Inline add card form (wired by board.js when columns are rendered) ──────

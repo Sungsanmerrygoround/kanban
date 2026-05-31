@@ -1,16 +1,17 @@
 // Application entry point — wires global events, gates load on auth,
 // subscribes to Firestore for real-time updates.
 
-import { load, save, applyRemote, filter, setUser } from './state.js';
+import { load, save, applyRemote, filter, setUser, undo, redo } from './state.js';
 import { refreshAll, setView } from './refresh.js';
 import { addProject } from './sidebar.js';
 import { addColumn } from './board.js';
-import { initModal, closeModal } from './modal.js';
+import { initModal, closeModal, flashMsg, initNotePage } from './modal.js';
 import { initArchive, closeArchive } from './archive.js';
 import { initAuth, onUserChange } from './auth.js';
 import { subscribeUserState } from './sync.js';
 import { initNotifications } from './notifications.js';
 import { initCalendar } from './calendar.js';
+import { initTimeline } from './timeline.js';
 
 // ── Wire global events ──────────────────────────────────────────────────────
 document.getElementById('addColNavBtn').addEventListener('click', addColumn);
@@ -28,18 +29,39 @@ document.querySelectorAll('.vt-btn').forEach(b => {
 
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
+    if (document.getElementById('notePageOverlay')?.classList.contains('open')) return;
     closeModal();
     closeArchive();
     document.querySelectorAll('.cal-day-popover').forEach(p => p.remove());
+    return;
+  }
+
+  const tag = document.activeElement?.tagName;
+  const inInput = tag === 'INPUT' || tag === 'TEXTAREA'
+    || document.activeElement?.isContentEditable;
+  if (inInput) return;
+
+  const mod = e.ctrlKey || e.metaKey;
+
+  if (mod && !e.shiftKey && e.key === 'z') {
+    e.preventDefault();
+    if (undo()) { refreshAll(); flashMsg('실행 취소 ✓'); }
+  }
+
+  if (mod && (e.key === 'y' || (e.shiftKey && e.key === 'z'))) {
+    e.preventDefault();
+    if (redo()) { refreshAll(); flashMsg('다시 실행 ✓'); }
   }
 });
 
 initModal();
+initNotePage();
 initArchive();
 initAuth();
 initSidebarToggle();
 initNotifications();
 initCalendar();
+initTimeline();
 
 // ── Sidebar collapse toggle ─────────────────────────────────────────────────
 function initSidebarToggle() {

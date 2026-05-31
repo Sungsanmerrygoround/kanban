@@ -19,19 +19,22 @@ export const COL_COLORS = [
   '#16a34a','#65a30d','#14b8a6','#059669',
 ];
 
-export const PROJECT_ICONS = [
-  '📁','🚀','📣','🛠️','💎','🌱','🎯','📊','🧩','🔬',
-];
+// ── Project colour palette (calendar + timeline share this) ─────────────────
+export const PROJECT_HUES = [216, 340, 152, 38, 268, 22, 188, 56];
+export function projectHue(projectId) {
+  const idx = state.projects.findIndex(p => p.id === projectId);
+  return PROJECT_HUES[(idx < 0 ? 0 : idx) % PROJECT_HUES.length];
+}
 
 // ── Sample data ─────────────────────────────────────────────────────────────
 const SAMPLE_STATE = {
   activeProjectId: 'p1',
   projects: [
     {
-      id: 'p1', name: '제품 개발', icon: '🚀',
+      id: 'p1', name: '제품 개발',
       columns: [
         {
-          id: 'c0', title: '📋 할 일', color: '#10a37f',
+          id: 'c0', title: '할 일', color: '#10a37f',
           cards: [
             { id:'k1', title:'랜딩 페이지 디자인 시안 3종', desc:'Figma로 라이트/다크/미니멀 옵션 제작 후 팀 리뷰', priority:'high', tags:['디자인','Figma'], due:'2026-05-17' },
             { id:'k2', title:'REST API 인증 로직 리팩토링', desc:'JWT 갱신 흐름 개선 및 에러 핸들링 표준화', priority:'medium', tags:['백엔드','보안'], due:'2026-05-19' },
@@ -40,14 +43,14 @@ const SAMPLE_STATE = {
           ],
         },
         {
-          id: 'c1', title: '🔄 진행 중', color: '#84cc16',
+          id: 'c1', title: '진행 중', color: '#84cc16',
           cards: [
             { id:'k5', title:'대시보드 번들 최적화', desc:'코드 스플리팅 + lazy import 적용, 번들 -40% 목표', priority:'high', tags:['프론트엔드','성능'], due:'2026-05-14' },
             { id:'k6', title:'B2B 고객 인터뷰 5건', desc:'UX 리서치 — 화면 녹화 동의 필요', priority:'medium', tags:['리서치','UX'], due:'2026-05-21' },
           ],
         },
         {
-          id: 'c2', title: '✅ 완료', color: '#0d9488',
+          id: 'c2', title: '완료', color: '#0d9488',
           cards: [
             { id:'k7', title:'데이터베이스 스키마 설계', desc:'users, sessions, events 테이블 확정', priority:'high', tags:['DB','백엔드'], due:'' },
             { id:'k8', title:'스테이징 환경 구축', desc:'Docker + GitHub Actions CI/CD 파이프라인 완성', priority:'medium', tags:['DevOps'], due:'' },
@@ -57,24 +60,24 @@ const SAMPLE_STATE = {
       ],
     },
     {
-      id: 'p2', name: '마케팅 캠페인', icon: '📣',
+      id: 'p2', name: '마케팅 캠페인',
       columns: [
         {
-          id: 'c3', title: '💡 아이디어', color: '#10a37f',
+          id: 'c3', title: '아이디어', color: '#10a37f',
           cards: [
             { id:'m1', title:'인스타그램 릴스 시리즈 기획', desc:'주 2회 업로드, 8주 콘텐츠 캘린더', priority:'medium', tags:['SNS','콘텐츠'], due:'2026-05-20' },
             { id:'m2', title:'인플루언서 협업 후보 리서치', desc:'팔로워 5만+ 라이프스타일 분야', priority:'low', tags:['리서치'], due:'' },
           ],
         },
         {
-          id: 'c4', title: '🎬 제작 중', color: '#84cc16',
+          id: 'c4', title: '제작 중', color: '#84cc16',
           cards: [
             { id:'m3', title:'런칭 이벤트 랜딩 페이지', desc:'개발팀 협업 — 5/22 오픈 예정', priority:'high', tags:['웹','이벤트'], due:'2026-05-18' },
             { id:'m4', title:'홍보 영상 1차 편집본 리뷰', desc:'', priority:'medium', tags:['영상'], due:'2026-05-24' },
           ],
         },
         {
-          id: 'c5', title: '📤 집행', color: '#0d9488',
+          id: 'c5', title: '집행', color: '#0d9488',
           cards: [
             { id:'m5', title:'5월 뉴스레터 발송', desc:'A/B 테스트 결과 분석 포함', priority:'medium', tags:['이메일'], due:'' },
           ],
@@ -82,23 +85,23 @@ const SAMPLE_STATE = {
       ],
     },
     {
-      id: 'p3', name: '운영 & 지원', icon: '🛠️',
+      id: 'p3', name: '운영 & 지원',
       columns: [
         {
-          id: 'c6', title: '📥 백로그', color: '#10a37f',
+          id: 'c6', title: '백로그', color: '#10a37f',
           cards: [
             { id:'o1', title:'고객 문의 자동 분류 시스템 도입', desc:'문의 카테고리별 라우팅', priority:'medium', tags:['CS','자동화'], due:'' },
             { id:'o2', title:'결제 실패 케이스 대응 매뉴얼', desc:'카드사별 에러 코드 정리', priority:'high', tags:['결제'], due:'2026-05-17' },
           ],
         },
         {
-          id: 'c7', title: '🔧 처리 중', color: '#84cc16',
+          id: 'c7', title: '처리 중', color: '#84cc16',
           cards: [
             { id:'o3', title:'프로덕션 알림 채널 분리', desc:'critical / warning / info 분리', priority:'medium', tags:['인프라','알림'], due:'2026-05-19' },
           ],
         },
         {
-          id: 'c8', title: '✅ 해결', color: '#0d9488',
+          id: 'c8', title: '해결', color: '#0d9488',
           cards: [
             { id:'o4', title:'서버 메모리 누수 이슈 해결', desc:'Node.js heap 분석 완료', priority:'high', tags:['인프라'], due:'' },
             { id:'o5', title:'로그인 이중 인증 안정화', desc:'', priority:'medium', tags:['보안'], due:'' },
@@ -115,6 +118,49 @@ const tagColorMap = {};
 let tagIdx = 0;
 
 export const filter = { query: '' };
+
+// ── Undo / Redo ──────────────────────────────────────────────────────────────
+const MAX_UNDO = 50;
+const _undoStack = [];
+const _redoStack = [];
+
+function _snap() {
+  return {
+    state: structuredClone(state),
+    tagColorMap: { ...tagColorMap },
+    tagIdx,
+  };
+}
+
+export function pushUndo() {
+  _redoStack.length = 0;
+  _undoStack.push(_snap());
+  if (_undoStack.length > MAX_UNDO) _undoStack.shift();
+}
+
+export function undo() {
+  if (!_undoStack.length) return false;
+  _redoStack.push(_snap());
+  const prev = _undoStack.pop();
+  state = prev.state;
+  Object.keys(tagColorMap).forEach(k => delete tagColorMap[k]);
+  Object.assign(tagColorMap, prev.tagColorMap);
+  tagIdx = prev.tagIdx;
+  saveLocal();
+  return true;
+}
+
+export function redo() {
+  if (!_redoStack.length) return false;
+  _undoStack.push(_snap());
+  const next = _redoStack.pop();
+  state = next.state;
+  Object.keys(tagColorMap).forEach(k => delete tagColorMap[k]);
+  Object.assign(tagColorMap, next.tagColorMap);
+  tagIdx = next.tagIdx;
+  saveLocal();
+  return true;
+}
 
 // ── Auth-scoped persistence ────────────────────────────────────────────────
 let currentUid = null;
@@ -168,6 +214,27 @@ export function save() {
 export function load() {
   loadLocal();
   applyShapeGuards();
+}
+
+// ── Import / Export helpers ──────────────────────────────────────────────────
+// Returns a plain-object snapshot safe to JSON-serialise.
+export function exportData() {
+  return {
+    state: structuredClone(state),
+    tagColorMap: { ...tagColorMap },
+    tagIdx,
+  };
+}
+
+// Replaces live state from a plain-object snapshot (e.g. loaded from JSON).
+export function importData(data) {
+  if (!data || !data.state) throw new Error('state 키가 없습니다');
+  state = data.state;
+  Object.keys(tagColorMap).forEach(k => delete tagColorMap[k]);
+  Object.assign(tagColorMap, data.tagColorMap || {});
+  tagIdx = data.tagIdx || 0;
+  applyShapeGuards();
+  saveLocal();
 }
 
 // Apply a snapshot received from Firestore. Ignores echoes of our own writes.

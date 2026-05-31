@@ -2,6 +2,19 @@
 
 export const uid = () => '_' + Math.random().toString(36).slice(2, 9);
 
+// ── Pointer/touch drag thresholds (shared by cards.js and calendar.js) ──────
+export const MOUSE_THRESHOLD   = 5;   // px before a mouse drag starts
+export const TOUCH_LONG_PRESS  = 250; // ms hold before touch drag starts
+export const TOUCH_CANCEL_DIST = 10;  // px movement that cancels the long-press
+
+// ISO date string YYYY-MM-DD from a Date object (local time, no UTC shift).
+export function ymd(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 // Strip leading emojis/whitespace from a display string.
 // Used on mobile so narrow cells don't waste glyph width.
 export function stripLeadingEmoji(s) {
