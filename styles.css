@@ -1698,8 +1698,15 @@ textarea.field-input { resize: vertical; min-height: 80px; line-height: 1.5; }
 .btn-ghost:hover svg { opacity: 1; }
 
 /* Template selector in quick-form */
+.qf-template-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0.45rem;
+}
 .qf-template {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   padding: 0.4rem 0.55rem;
   font: inherit;
   font-size: 0.78rem;
@@ -1708,9 +1715,25 @@ textarea.field-input { resize: vertical; min-height: 80px; line-height: 1.5; }
   background: #ffffff;
   color: var(--text);
   cursor: pointer;
-  margin-bottom: 0.45rem;
 }
 .qf-template:focus { outline: none; border-color: var(--border2); }
+.qf-tpl-delete {
+  flex-shrink: 0;
+  width: 1.6rem;
+  height: 1.6rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--text2);
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.15s, color 0.15s;
+}
+.qf-tpl-delete:hover { border-color: #ef4444; color: #ef4444; }
 
 .btn-danger {
   padding: 0.45rem 0.75rem;

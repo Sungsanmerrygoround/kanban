@@ -145,10 +145,13 @@ function buildColumn(col) {
   // Add-card area
   const templates = (state.templates || []);
   const tplSelectHtml = templates.length ? `
-    <select class="qf-template" data-col-id="${col.id}">
-      <option value="">템플릿에서 시작 (선택)</option>
-      ${templates.map(t => `<option value="${t.id}">${escHtml(t.name)}</option>`).join('')}
-    </select>
+    <div class="qf-template-row">
+      <select class="qf-template" data-col-id="${col.id}">
+        <option value="">템플릿에서 시작 (선택)</option>
+        ${templates.map(t => `<option value="${t.id}">${escHtml(t.name)}</option>`).join('')}
+      </select>
+      <button class="qf-tpl-delete" title="선택한 템플릿 삭제">×</button>
+    </div>
   ` : '';
 
   const addArea = document.createElement('div');
@@ -181,6 +184,19 @@ function buildColumn(col) {
   addArea.querySelector('.add-card-btn').addEventListener('click', () => openQuickForm(col.id));
   addArea.querySelector('.qa-add').addEventListener('click', () => submitQuickForm(col.id));
   addArea.querySelector('.qa-cancel').addEventListener('click', () => closeQuickForm(col.id));
+  const tplDelBtn = addArea.querySelector('.qf-tpl-delete');
+  if (tplDelBtn) {
+    tplDelBtn.addEventListener('click', () => {
+      const sel = addArea.querySelector('.qf-template');
+      if (!sel || !sel.value) return;
+      const tpl = (state.templates || []).find(t => t.id === sel.value);
+      if (!tpl) return;
+      if (!confirm(`"${tpl.name}" 템플릿을 삭제할까요?`)) return;
+      state.templates = state.templates.filter(t => t.id !== sel.value);
+      save();
+      refreshAll();
+    });
+  }
   addArea.querySelector('textarea').addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitQuickForm(col.id); }
     if (e.key === 'Escape') closeQuickForm(col.id);
