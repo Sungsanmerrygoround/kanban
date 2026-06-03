@@ -3,6 +3,7 @@
 
 import {
   save, findCard, getColById, activeColumns, activeProject, tagColor, state, pushUndo,
+  setActiveProject, ALL_PROJECT_ID,
 } from './state.js';
 import { escHtml, renderMarkdown, compressImageBlob, nextDueDate } from './utils.js';
 import { refreshAll } from './refresh.js';
@@ -13,6 +14,7 @@ import { uid } from './utils.js';
 const np = {
   cardId:    null,
   fromModal: false,
+  returnToAll: false,
   priority:  'none',
   tags:      [],
   viewMode:  'edit',
@@ -25,10 +27,19 @@ const m = {
   tags: [],
   checklist: [],
   recurrence: 'none',
+  returnToAll: false,   // opened from the "전체" view → restore it on close
 };
 
 // ── Open / close ────────────────────────────────────────────────────────────
-export function openModal(cardId) {
+export function openModal(cardId, opts = {}) {
+  // When opened from the cross-project "전체" board, switch to the card's own
+  // project first (the modal edits the active project) and remember to return.
+  if (opts.projectId && opts.projectId !== state.activeProjectId) {
+    setActiveProject(opts.projectId);
+    refreshAll();
+  }
+  m.returnToAll = !!opts.returnToAll;
+
   const result = findCard(cardId);
   if (!result) return;
   const { card, col } = result;
@@ -82,8 +93,15 @@ function autoResize(el) {
 
 export function closeModal() {
   document.getElementById('overlay').classList.remove('open');
+  const returnToAll = m.returnToAll;
   m.cardId = null;
   m.colId  = null;
+  m.returnToAll = false;
+  // If this card was opened from the "전체" board, go back to it.
+  if (returnToAll && state.activeProjectId !== ALL_PROJECT_ID) {
+    state.activeProjectId = ALL_PROJECT_ID;
+    refreshAll();
+  }
 }
 
 // ── Read-from-DOM helper ────────────────────────────────────────────────────
@@ -182,6 +200,9 @@ function duplicateCard() {
   const result = findCard(m.cardId);
   if (!result) return;
   const { card, col } = result;
+  // Preserve "전체"-view origin so the clone's modal also returns there.
+  const returnToAll = m.returnToAll;
+  const projId = state.activeProjectId;
 
   // Apply any unsaved edits to source before cloning, so the clone reflects them.
   Object.assign(card, readForm());
@@ -201,8 +222,12 @@ function duplicateCard() {
   save();
   refreshAll();
   closeModal();
-  // Open the clone for immediate editing.
-  setTimeout(() => openModal(clone.id), 50);
+  // Open the clone for immediate editing (re-entering its project if we came
+  // from the "전체" board, since closeModal switched back to it).
+  setTimeout(
+    () => openModal(clone.id, returnToAll ? { projectId: projId, returnToAll: true } : undefined),
+    50,
+  );
 }
 
 function saveAsTemplate() {
@@ -463,7 +488,12 @@ export function initModal() {
       const form = readForm();
       if (form.title) Object.assign(result.card, form);
     }
+    // Hand the 전체-view origin to the note page; clear it on the modal so the
+    // upcoming closeModal() just hides the modal without switching the view.
+    const returnToAll = m.returnToAll;
+    m.returnToAll = false;
     openNotePage(m.cardId, true);
+    np.returnToAll = returnToAll;
     closeModal();
   });
 }
@@ -476,6 +506,7 @@ export function openNotePage(cardId, fromModal = false) {
 
   np.cardId    = cardId;
   np.fromModal = fromModal;
+  np.returnToAll = false;   // notesExpand sets this after, for 전체-view origin
   np.priority  = fromModal ? m.priority : card.priority;
   np.tags      = fromModal ? [...m.tags] : [...(card.tags || [])];
   np.viewMode  = 'edit';
@@ -543,15 +574,21 @@ function saveNotePageData() {
 }
 
 function closeNotePage() {
-  const cardId    = np.cardId;
-  const fromModal = np.fromModal;
+  const cardId     = np.cardId;
+  const fromModal  = np.fromModal;
+  const returnToAll = np.returnToAll;
   document.getElementById('notePageOverlay').classList.remove('open');
   np.cardId    = null;
   np.fromModal = false;
+  np.returnToAll = false;
 
   if (fromModal && cardId) {
-    // Re-open modal so user can continue editing other fields
-    openModal(cardId);
+    // Re-open modal so user can continue editing other fields (carrying the
+    // 전체-view origin so its eventual close returns there).
+    openModal(cardId, returnToAll ? { returnToAll: true } : undefined);
+  } else if (returnToAll && state.activeProjectId !== ALL_PROJECT_ID) {
+    state.activeProjectId = ALL_PROJECT_ID;
+    refreshAll();
   }
 }
 

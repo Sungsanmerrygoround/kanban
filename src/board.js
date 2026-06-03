@@ -183,9 +183,8 @@ function buildAllCard(card, project) {
 
   el.addEventListener('click', () => {
     if (el.dataset.suppressClick) return;
-    setActiveProject(project.id);
-    refreshAll();
-    openModal(card.id);
+    // Open in the card's own project, but return to the 전체 board on close.
+    openModal(card.id, { projectId: project.id, returnToAll: true });
   });
   el.addEventListener('pointerdown', (e) => onAllPointerDown(e, card, project, el));
   return el;
