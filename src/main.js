@@ -11,7 +11,6 @@ import { initAuth, onUserChange } from './auth.js';
 import { subscribeUserState } from './sync.js';
 import { initNotifications } from './notifications.js';
 import { initCalendar } from './calendar.js';
-import { initTimeline } from './timeline.js';
 
 // ── Wire global events ──────────────────────────────────────────────────────
 document.getElementById('addColNavBtn').addEventListener('click', addColumn);
@@ -61,7 +60,6 @@ initAuth();
 initSidebarToggle();
 initNotifications();
 initCalendar();
-initTimeline();
 
 // ── Sidebar collapse toggle ─────────────────────────────────────────────────
 function initSidebarToggle() {

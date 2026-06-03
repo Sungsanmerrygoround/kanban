@@ -531,7 +531,7 @@ body {
   border-radius: var(--card-radius) var(--card-radius) 0 0;
 }
 /* Board view is single-project, so the top project-hue bar carries no info there.
-   Hide it on the board; keep it for cross-project views (calendar / timeline). */
+   Hide it on the board; keep it for cross-project views (calendar, 전체). */
 body.view-board .card::before { display: none; }
 body.view-board .card { padding-top: 0.85rem; }
 
@@ -2430,233 +2430,9 @@ body.sidebar-collapsed .sidebar-open-btn { display: inline-flex; }
   }
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   TIMELINE / GANTT VIEW
-   ═══════════════════════════════════════════════════════════════════════════ */
-
-/* Hide "컬럼 추가" in non-board views */
+/* Hide "컬럼 추가" in non-board views (calendar / 전체 aggregate) */
 body.view-calendar #addColNavBtn,
-body.view-timeline #addColNavBtn { display: none; }
-
-.tl-wrap {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  overflow: hidden;
-}
-
-/* ── Controls bar ── */
-.tl-controls {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.6rem 1rem;
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-  background: var(--bg);
-}
-.tl-zoom-ctrl {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-.tl-zoom-label {
-  font-size: 0.75rem;
-  color: var(--muted2);
-  min-width: 2.2rem;
-  text-align: center;
-}
-
-/* ── Scroll container ── */
-.tl-scroll {
-  flex: 1;
-  overflow: auto;
-  position: relative;
-}
-
-/* ── Grid ── */
-.tl-grid {
-  display: grid;
-  /* grid-template-columns set inline by JS */
-  position: relative;
-  min-height: 100%;
-}
-
-/* ── Sticky corner (top-left) ── */
-.tl-corner {
-  position: sticky;
-  top: 0;
-  left: 0;
-  z-index: 20;
-  height: 54px;
-  background: var(--bg);
-  border-bottom: 1px solid var(--border2);
-  border-right: 1px solid var(--border);
-}
-
-/* ── Date ruler (sticky top) ── */
-.tl-date-ruler {
-  position: sticky;
-  top: 0;
-  z-index: 15;
-  background: var(--bg);
-  border-bottom: 1px solid var(--border2);
-  user-select: none;
-}
-.tl-months {
-  display: flex;
-  height: 22px;
-  border-bottom: 1px solid var(--border);
-}
-.tl-month-label {
-  flex-shrink: 0;
-  padding: 0 0.5rem;
-  font-size: 0.7rem;
-  font-weight: 600;
-  color: var(--muted2);
-  display: flex;
-  align-items: center;
-  border-right: 1px solid var(--border);
-  white-space: nowrap;
-  overflow: hidden;
-}
-.tl-days {
-  display: flex;
-  height: 32px;
-}
-.tl-day-cell {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.68rem;
-  color: var(--muted);
-  border-right: 1px solid var(--border);
-  box-sizing: border-box;
-}
-.tl-day-cell.weekend { background: hsla(0,0%,50%,0.05); color: var(--muted2); }
-.tl-day-cell.today   { background: rgba(239,68,68,0.1); color: #ef4444; font-weight: 700; }
-
-/* ── Group header ── */
-.tl-group-head {
-  position: sticky;
-  left: 0;
-  z-index: 10;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  height: 38px;
-  padding: 0 0.75rem;
-  background: hsla(var(--ph,220), 55%, 50%, 0.1);
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: var(--text);
-}
-.tl-group-right {
-  height: 38px;
-  background: hsla(var(--ph,220), 55%, 50%, 0.05);
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-}
-
-/* ── Card label (sticky left) ── */
-.tl-label {
-  position: sticky;
-  left: 0;
-  z-index: 8;
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  height: 34px;
-  padding: 0 0.75rem;
-  background: var(--bg);
-  border-bottom: 1px solid var(--border);
-  font-size: 0.78rem;
-  color: var(--text);
-  transition: background 0.1s;
-}
-.tl-label:hover { background: var(--surface); }
-.tl-label-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.tl-label-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1;
-  min-width: 0;
-}
-
-/* ── Card track (right column) ── */
-.tl-track {
-  position: relative;
-  height: 34px;
-  border-bottom: 1px solid var(--border);
-  background: repeating-linear-gradient(
-    90deg,
-    transparent,
-    transparent calc(var(--tl-dw, 32px) - 1px),
-    var(--border) calc(var(--tl-dw, 32px) - 1px),
-    var(--border) var(--tl-dw, 32px)
-  );
-}
-
-/* ── Bar ── */
-.tl-bar {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  height: 22px;
-  border-radius: var(--r-xs);
-  border-left: 3px solid hsl(var(--ph, 220), 62%, 46%);
-  background: hsla(var(--ph, 220), 62%, 54%, 0.18);
-  display: flex;
-  align-items: center;
-  padding: 0 0.4rem;
-  cursor: pointer;
-  white-space: nowrap;
-  overflow: hidden;
-  transition: background 0.1s;
-  box-sizing: border-box;
-}
-.tl-bar:hover { background: hsla(var(--ph, 220), 62%, 54%, 0.32); }
-.tl-bar-label {
-  font-size: 0.7rem;
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: var(--text);
-}
-
-/* ── Today line ── */
-.tl-today-line {
-  position: absolute;
-  top: 0;
-  width: 2px;
-  background: #ef4444;
-  opacity: 0.55;
-  pointer-events: none;
-  z-index: 12;
-}
-
-/* ── Empty state ── */
-.tl-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.75rem;
-  height: 100%;
-  min-height: 300px;
-  color: var(--muted);
-  font-size: 0.9rem;
-}
-.tl-empty-icon { font-size: 2.5rem; }
+body.all-view #addColNavBtn { display: none; }
 
 /* ── Backup reminder banner ────────────────────────────────────────────────── */
 .backup-banner {
@@ -3039,5 +2815,51 @@ body.view-timeline #addColNavBtn { display: none; }
 .np-preview-pane hr { border: none; border-top: 1px solid var(--border); margin: 1rem 0; }
 .np-preview-pane table { border-collapse: collapse; width: 100%; margin: 0.6rem 0; font-size: 0.88em; }
 .np-preview-pane th, .np-preview-pane td { border: 1px solid var(--border); padding: 0.4rem 0.7rem; text-align: left; }
+
+/* ── "전체" aggregate board ──────────────────────────────────────────────── */
+/* Project badge shown on each card in the 전체 view (colored by project hue). */
+.card-project {
+  display: inline-block;
+  font-size: 0.66rem;
+  font-weight: 700;
+  color: hsl(var(--ph, 220), 42%, 38%);
+  background: hsl(var(--ph, 220), 58%, 95%);
+  padding: 0.1rem 0.45rem;
+  border-radius: var(--r-xs);
+  margin-bottom: 0.45rem;
+  letter-spacing: -0.01em;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The pinned 전체 sidebar item has no project-delete; keep its count visible. */
+.project-item.all-item:hover .project-count { display: inline-block; }
+
+/* Project-name prefix on calendar chips / span bars. */
+.cal-proj {
+  font-weight: 700;
+  opacity: 0.7;
+  margin-right: 0.12em;
+}
+
+/* ── Project list drag-to-reorder ────────────────────────────────────────── */
+.project-item.dragging { opacity: 0.4; }
+.project-ghost {
+  position: fixed;
+  z-index: 1000;
+  pointer-events: none;
+  opacity: 0.95;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+  border-radius: var(--r-sm);
+  padding: 0.5rem 0.6rem;
+}
+.project-drop-ph {
+  height: 2px;
+  background: var(--accent);
+  border-radius: 2px;
+  margin: 1px 0.6rem;
+}
 .np-preview-pane th { background: var(--surface2); font-weight: 600; }
 .np-empty-preview { color: var(--muted); font-style: italic; }

@@ -1,6 +1,14 @@
 // Application state, persistence, sample data, and lookup helpers.
 
 import { writeUserState } from './sync.js';
+import { uid } from './utils.js';
+
+// Virtual project id for the cross-project "전체" aggregate board.
+export const ALL_PROJECT_ID = '__all__';
+export function isAllView() { return state.activeProjectId === ALL_PROJECT_ID; }
+
+// Standard column set every project is unified to.
+export const STD_COLUMNS = ['할 일', '진행 중', '완료'];
 
 // Unique per browser tab — used to ignore our own snapshot echoes.
 export const clientId = (crypto.randomUUID && crypto.randomUUID()) ||
@@ -19,7 +27,7 @@ export const COL_COLORS = [
   '#16a34a','#65a30d','#14b8a6','#059669',
 ];
 
-// ── Project colour palette (calendar + timeline share this) ─────────────────
+// ── Project colour palette (calendar uses this) ─────────────────────────────
 export const PROJECT_HUES = [216, 340, 152, 38, 268, 22, 188, 56];
 export function projectHue(projectId) {
   const idx = state.projects.findIndex(p => p.id === projectId);
@@ -29,6 +37,7 @@ export function projectHue(projectId) {
 // ── Sample data ─────────────────────────────────────────────────────────────
 const SAMPLE_STATE = {
   activeProjectId: 'p1',
+  schemaVersion: 1,
   projects: [
     {
       id: 'p1', name: '제품 개발',
@@ -63,21 +72,21 @@ const SAMPLE_STATE = {
       id: 'p2', name: '마케팅 캠페인',
       columns: [
         {
-          id: 'c3', title: '아이디어', color: '#10a37f',
+          id: 'c3', title: '할 일', color: '#10a37f',
           cards: [
             { id:'m1', title:'인스타그램 릴스 시리즈 기획', desc:'주 2회 업로드, 8주 콘텐츠 캘린더', priority:'medium', tags:['SNS','콘텐츠'], due:'2026-05-20' },
             { id:'m2', title:'인플루언서 협업 후보 리서치', desc:'팔로워 5만+ 라이프스타일 분야', priority:'low', tags:['리서치'], due:'' },
           ],
         },
         {
-          id: 'c4', title: '제작 중', color: '#84cc16',
+          id: 'c4', title: '진행 중', color: '#84cc16',
           cards: [
             { id:'m3', title:'런칭 이벤트 랜딩 페이지', desc:'개발팀 협업 — 5/22 오픈 예정', priority:'high', tags:['웹','이벤트'], due:'2026-05-18' },
             { id:'m4', title:'홍보 영상 1차 편집본 리뷰', desc:'', priority:'medium', tags:['영상'], due:'2026-05-24' },
           ],
         },
         {
-          id: 'c5', title: '집행', color: '#0d9488',
+          id: 'c5', title: '완료', color: '#0d9488',
           cards: [
             { id:'m5', title:'5월 뉴스레터 발송', desc:'A/B 테스트 결과 분석 포함', priority:'medium', tags:['이메일'], due:'' },
           ],
@@ -88,20 +97,20 @@ const SAMPLE_STATE = {
       id: 'p3', name: '운영 & 지원',
       columns: [
         {
-          id: 'c6', title: '백로그', color: '#10a37f',
+          id: 'c6', title: '할 일', color: '#10a37f',
           cards: [
             { id:'o1', title:'고객 문의 자동 분류 시스템 도입', desc:'문의 카테고리별 라우팅', priority:'medium', tags:['CS','자동화'], due:'' },
             { id:'o2', title:'결제 실패 케이스 대응 매뉴얼', desc:'카드사별 에러 코드 정리', priority:'high', tags:['결제'], due:'2026-05-17' },
           ],
         },
         {
-          id: 'c7', title: '처리 중', color: '#84cc16',
+          id: 'c7', title: '진행 중', color: '#84cc16',
           cards: [
             { id:'o3', title:'프로덕션 알림 채널 분리', desc:'critical / warning / info 분리', priority:'medium', tags:['인프라','알림'], due:'2026-05-19' },
           ],
         },
         {
-          id: 'c8', title: '해결', color: '#0d9488',
+          id: 'c8', title: '완료', color: '#0d9488',
           cards: [
             { id:'o4', title:'서버 메모리 누수 이슈 해결', desc:'Node.js heap 분석 완료', priority:'high', tags:['인프라'], due:'' },
             { id:'o5', title:'로그인 이중 인증 안정화', desc:'', priority:'medium', tags:['보안'], due:'' },
@@ -183,10 +192,43 @@ function applyShapeGuards() {
   if (!state || !Array.isArray(state.projects) || state.projects.length === 0) {
     state = structuredClone(SAMPLE_STATE);
   }
-  if (!state.activeProjectId || !state.projects.find(p => p.id === state.activeProjectId)) {
+  // One-time migration: unify every project's columns to 할 일 / 진행 중 / 완료.
+  // Runs once per dataset (guarded by schemaVersion) so later user-added columns
+  // (e.g. "기타") survive subsequent loads.
+  if (!state.schemaVersion) {
+    state.projects.forEach(migrateProjectColumns);
+    state.schemaVersion = 1;
+  }
+  // Keep the "전체" virtual selection; otherwise fall back to a real project.
+  if (state.activeProjectId !== ALL_PROJECT_ID &&
+      (!state.activeProjectId || !state.projects.find(p => p.id === state.activeProjectId))) {
     state.activeProjectId = state.projects[0].id;
   }
   if (!Array.isArray(state.templates)) state.templates = [];
+}
+
+// Rebuild a project's columns into exactly [할 일, 진행 중, 완료], bucketing the
+// existing columns by position (first → 할 일, last → 완료, middle → 진행 중) and
+// concatenating their cards in order. Idempotent: a project already in standard
+// shape is left untouched.
+function migrateProjectColumns(project) {
+  const cols = project.columns || [];
+  const isStandard = cols.length === 3 &&
+    cols.every((c, i) => c.title === STD_COLUMNS[i]);
+  if (isStandard) return;
+
+  const n = cols.length;
+  const buckets = [[], [], []];
+  cols.forEach((c, i) => {
+    const b = n <= 1 ? 0 : (i === 0 ? 0 : i === n - 1 ? 2 : 1);
+    buckets[b].push(...(c.cards || []));
+  });
+  project.columns = STD_COLUMNS.map((title, i) => ({
+    id: uid(),
+    title,
+    color: COL_COLORS[i],
+    cards: buckets[i],
+  }));
 }
 
 function saveLocal() {

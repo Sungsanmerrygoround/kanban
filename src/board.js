@@ -2,9 +2,12 @@
 
 import {
   state, activeProject, activeColumns, getColById, matchesSearch, filter,
-  save, setActiveProject, COL_COLORS, pushUndo,
+  save, setActiveProject, COL_COLORS, pushUndo, isAllView, STD_COLUMNS,
+  findCardAnywhere,
 } from './state.js';
-import { uid, escHtml, MOUSE_THRESHOLD } from './utils.js';
+import {
+  uid, escHtml, MOUSE_THRESHOLD, TOUCH_LONG_PRESS, TOUCH_CANCEL_DIST,
+} from './utils.js';
 import { refreshAll } from './refresh.js';
 import { buildCard, openQuickForm, closeQuickForm, submitQuickForm } from './cards.js';
 import { openModal } from './modal.js';
@@ -17,6 +20,11 @@ export function renderBoard() {
 
   if (filter.query) {
     renderSearchResults(board);
+    return;
+  }
+
+  if (isAllView()) {
+    renderAllBoard(board);
     return;
   }
 
@@ -103,6 +111,206 @@ function buildSearchCard(card, col, project) {
     openModal(card.id);
   });
   return fresh;
+}
+
+// ── "전체" aggregate board (all projects, read-only positioning) ─────────────
+// Buckets every project's live cards into the 3 standard columns by column title.
+// Cards open the modal via the proven "switch project then open" pattern; drag is
+// intentionally disabled here (cloneNode strips the pointer listeners).
+function statusBucket(title) {
+  const i = STD_COLUMNS.indexOf(title);
+  return i >= 0 ? i : 1; // unknown / 기타 columns fold into 진행 중
+}
+
+function renderAllBoard(board) {
+  board.classList.remove('search-mode');
+
+  const buckets = STD_COLUMNS.map(() => []);
+  state.projects.forEach(project => {
+    project.columns.forEach(col => {
+      col.cards.forEach(card => {
+        if (card.archived) return;
+        buckets[statusBucket(col.title)].push({ card, project });
+      });
+    });
+  });
+
+  STD_COLUMNS.forEach((title, i) => {
+    board.appendChild(buildAllColumn(title, COL_COLORS[i], buckets[i]));
+  });
+}
+
+function buildAllColumn(title, color, entries) {
+  const el = document.createElement('div');
+  el.className = 'column all-column';
+
+  const hdr = document.createElement('div');
+  hdr.className = 'col-header';
+  hdr.innerHTML = `
+    <div class="col-dot" style="background:${color}"></div>
+    <div class="col-title-wrap"><div class="col-title">${escHtml(title)}</div></div>
+    <div class="col-badge">${entries.length}</div>
+  `;
+  el.appendChild(hdr);
+  el.appendChild(divider());
+
+  const area = document.createElement('div');
+  area.className = 'cards-area';
+  area.dataset.status = title;   // drop target: card moves to this status
+  if (entries.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'empty-col';
+    empty.textContent = '카드가 없습니다';
+    area.appendChild(empty);
+  }
+  entries.forEach(({ card, project }) => area.appendChild(buildAllCard(card, project)));
+  el.appendChild(area);
+
+  return el;
+}
+
+function buildAllCard(card, project) {
+  // Reuse the standard card, then clone to drop the per-project drag listeners
+  // (same trick as buildSearchCard), prepend a project badge, then wire a
+  // cross-project open + a dedicated all-view drag (move to dropped status).
+  const base = buildCard(card, project.id);
+  const el = base.cloneNode(true);
+
+  const badge = document.createElement('div');
+  badge.className = 'card-project';
+  badge.textContent = project.name;
+  el.insertBefore(badge, el.firstChild);
+
+  el.addEventListener('click', () => {
+    if (el.dataset.suppressClick) return;
+    setActiveProject(project.id);
+    refreshAll();
+    openModal(card.id);
+  });
+  el.addEventListener('pointerdown', (e) => onAllPointerDown(e, card, project, el));
+  return el;
+}
+
+// ── "전체" board drag: move a card to the dropped status column within its own
+//    project (pointer: mouse + touch). Reorder isn't meaningful across projects,
+//    so a drop simply appends the card to the target status column. ────────────
+let allDrag = null;
+
+function onAllPointerDown(e, card, project, el) {
+  if (allDrag) return;
+  if (e.button !== undefined && e.button !== 0) return;
+
+  allDrag = {
+    cardId: card.id, projectId: project.id, el,
+    pointerId: e.pointerId, pointerType: e.pointerType,
+    startX: e.clientX, startY: e.clientY,
+    started: false, ghost: null, targetStatus: null, longPressTimer: null,
+  };
+
+  if (e.pointerType === 'touch') {
+    allDrag.longPressTimer = setTimeout(() => {
+      if (allDrag && !allDrag.started) startAllDrag(allDrag.startX, allDrag.startY);
+    }, TOUCH_LONG_PRESS);
+  }
+  window.addEventListener('pointermove', onAllMove);
+  window.addEventListener('pointerup', onAllUp);
+  window.addEventListener('pointercancel', onAllUp);
+}
+
+function onAllMove(e) {
+  if (!allDrag || e.pointerId !== allDrag.pointerId) return;
+  const dist = Math.hypot(e.clientX - allDrag.startX, e.clientY - allDrag.startY);
+
+  if (!allDrag.started) {
+    if (allDrag.pointerType === 'touch') {
+      if (dist > TOUCH_CANCEL_DIST) { clearTimeout(allDrag.longPressTimer); allCleanup(); }
+    } else if (dist > MOUSE_THRESHOLD) {
+      startAllDrag(e.clientX, e.clientY);
+    }
+    return;
+  }
+  e.preventDefault();
+  moveAllGhost(e.clientX, e.clientY);
+  updateAllDropTarget(e.clientX, e.clientY);
+}
+
+function startAllDrag(x, y) {
+  const rect = allDrag.el.getBoundingClientRect();
+  allDrag.offsetX = allDrag.startX - rect.left;
+  allDrag.offsetY = allDrag.startY - rect.top;
+  allDrag.started = true;
+
+  const ghost = allDrag.el.cloneNode(true);
+  ghost.classList.add('drag-ghost');
+  ghost.style.width = rect.width + 'px';
+  document.body.appendChild(ghost);
+  allDrag.ghost = ghost;
+
+  allDrag.el.classList.add('dragging');
+  document.body.classList.add('dragging-active');
+  try { allDrag.el.setPointerCapture(allDrag.pointerId); } catch (_) {}
+
+  moveAllGhost(x, y);
+  updateAllDropTarget(x, y);
+  if (allDrag.pointerType === 'touch' && navigator.vibrate) navigator.vibrate(15);
+}
+
+function moveAllGhost(x, y) {
+  allDrag.ghost.style.left = (x - allDrag.offsetX) + 'px';
+  allDrag.ghost.style.top  = (y - allDrag.offsetY) + 'px';
+}
+
+function updateAllDropTarget(x, y) {
+  const prev = allDrag.ghost.style.display;
+  allDrag.ghost.style.display = 'none';
+  const under = document.elementFromPoint(x, y);
+  allDrag.ghost.style.display = prev;
+
+  document.querySelectorAll('.column.drag-over').forEach(c => c.classList.remove('drag-over'));
+  const area = under && under.closest('.cards-area');
+  if (!area || !area.dataset.status) { allDrag.targetStatus = null; return; }
+  area.closest('.column').classList.add('drag-over');
+  allDrag.targetStatus = area.dataset.status;
+}
+
+function onAllUp(e) {
+  if (!allDrag || e.pointerId !== allDrag.pointerId) return;
+  clearTimeout(allDrag.longPressTimer);
+  if (allDrag.started) {
+    performAllDrop();
+    allDrag.el.dataset.suppressClick = '1';
+    const el = allDrag.el;
+    setTimeout(() => { delete el.dataset.suppressClick; }, 300);
+  }
+  allCleanup();
+}
+
+function performAllDrop() {
+  if (!allDrag.targetStatus) return;
+  const r = findCardAnywhere(allDrag.cardId);
+  if (!r) return;
+  const { card, col, project } = r;
+  const dest = project.columns.find(c => c.title === allDrag.targetStatus);
+  if (!dest || dest === col) return;     // unknown status or same column → no-op
+  pushUndo();
+  col.cards = col.cards.filter(c => c.id !== card.id);
+  dest.cards.push(card);
+  save();
+  refreshAll();
+}
+
+function allCleanup() {
+  if (allDrag) {
+    if (allDrag.ghost) allDrag.ghost.remove();
+    if (allDrag.el) allDrag.el.classList.remove('dragging');
+    try { allDrag.el.releasePointerCapture(allDrag.pointerId); } catch (_) {}
+  }
+  document.body.classList.remove('dragging-active');
+  document.querySelectorAll('.column.drag-over').forEach(c => c.classList.remove('drag-over'));
+  window.removeEventListener('pointermove', onAllMove);
+  window.removeEventListener('pointerup', onAllUp);
+  window.removeEventListener('pointercancel', onAllUp);
+  allDrag = null;
 }
 
 function buildColumn(col) {
@@ -213,7 +421,7 @@ export function addColumn() {
   const cols = activeColumns();
   const color = COL_COLORS[cols.length % COL_COLORS.length];
   pushUndo();
-  cols.push({ id: uid(), title: '새 컬럼', color, cards: [] });
+  cols.push({ id: uid(), title: '기타', color, cards: [] });
   save();
   refreshAll();
 

@@ -259,7 +259,7 @@ function buildSpanBar({ span, lane, dayStart, dayEnd }, weekStartTm, weekEndTm) 
   bar.style.width = ((dayEnd - dayStart + 1) / 7 * 100) + '%';
   bar.style.top   = `calc(var(--date-num-h) + ${lane} * (var(--lane-h) + var(--lane-gap)))`;
 
-  bar.innerHTML = `<span class="cal-bar-title">${escHtml(displayTitle(card.title))}</span>`;
+  bar.innerHTML = `<span class="cal-bar-title"><span class="cal-proj">${escHtml(project.name)}</span> ${escHtml(displayTitle(card.title))}</span>`;
   bar.dataset.dayCount = String(dayEnd - dayStart + 1);
 
   bar.addEventListener('click', (e) => {
@@ -335,7 +335,7 @@ function buildChip(card, project) {
   chip.dataset.cardId = card.id;
   chip.dataset.projectId = project.id;
 
-  chip.innerHTML = `<span class="cal-chip-title">${escHtml(displayTitle(card.title))}</span>`;
+  chip.innerHTML = `<span class="cal-chip-title"><span class="cal-proj">${escHtml(project.name)}</span> ${escHtml(displayTitle(card.title))}</span>`;
   chip.style.setProperty('--ph', projectHue(project.id));
 
   chip.addEventListener('click', (e) => {

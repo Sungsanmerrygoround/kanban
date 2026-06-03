@@ -1,7 +1,7 @@
 // Left sidebar: project tree rendering + project CRUD (add / switch / delete / rename).
 
-import { state, save, activeProject, filter, projectHue } from './state.js';
-import { uid, escHtml } from './utils.js';
+import { state, save, activeProject, filter, projectHue, ALL_PROJECT_ID, isAllView } from './state.js';
+import { uid, escHtml, MOUSE_THRESHOLD, TOUCH_LONG_PRESS, TOUCH_CANCEL_DIST } from './utils.js';
 import { refreshAll } from './refresh.js';
 
 // ── Render ──────────────────────────────────────────────────────────────────
@@ -9,6 +9,19 @@ export function renderSidebar() {
   const list = document.getElementById('projectList');
   list.innerHTML = '';
   const statsEl = document.getElementById('sidebarStats');
+
+  // Pinned "전체" aggregate (all projects). Not a real project — no delete/rename.
+  const allCards = state.projects.reduce((s, p) =>
+    s + p.columns.reduce((s2, c) => s2 + c.cards.filter(cd => !cd.archived).length, 0), 0);
+  const allItem = document.createElement('div');
+  allItem.className = 'project-item all-item' + (isAllView() ? ' active' : '');
+  allItem.innerHTML = `
+    <span class="project-icon">📋</span>
+    <span class="project-name">전체</span>
+    <span class="project-count">${allCards}</span>
+  `;
+  allItem.addEventListener('click', () => switchProject(ALL_PROJECT_ID));
+  list.appendChild(allItem);
 
   state.projects.forEach(proj => {
     const liveCards = proj.columns.reduce((sum, c) => sum + c.cards.filter(cd => !cd.archived).length, 0);
@@ -38,6 +51,7 @@ export function renderSidebar() {
       e.stopPropagation();
       startProjectRename(nameEl);
     });
+    item.addEventListener('pointerdown', e => onProjPointerDown(e, proj, item));
 
     list.appendChild(item);
   });
@@ -67,8 +81,8 @@ export function renderSidebar() {
 }
 
 export function renderNavbarTitle() {
-  const proj = activeProject();
-  document.getElementById('projectTitleName').textContent = proj.name;
+  document.getElementById('projectTitleName').textContent =
+    isAllView() ? '전체' : activeProject().name;
 }
 
 // ── Actions ─────────────────────────────────────────────────────────────────
@@ -151,4 +165,138 @@ export function startProjectRename(el) {
   };
   el.addEventListener('blur', finish);
   el.addEventListener('keydown', onKey);
+}
+
+// ── Project drag-to-reorder (pointer: mouse + touch) ─────────────────────────
+let projDrag = null;
+
+function onProjPointerDown(e, proj, itemEl) {
+  if (projDrag) return;
+  if (e.button !== undefined && e.button !== 0) return;       // left mouse only
+  if (e.target.closest('.project-delete')) return;            // delete button
+  const nameEl = itemEl.querySelector('.project-name');
+  if (nameEl && nameEl.isContentEditable) return;             // mid-rename
+
+  projDrag = {
+    projId: proj.id, itemEl,
+    pointerId: e.pointerId, pointerType: e.pointerType,
+    startX: e.clientX, startY: e.clientY,
+    started: false, ghost: null, insertBeforeId: null,
+    offsetX: 0, offsetY: 0, longPressTimer: null,
+  };
+
+  if (e.pointerType === 'touch') {
+    projDrag.longPressTimer = setTimeout(() => {
+      if (projDrag && !projDrag.started) startProjDrag(projDrag.startX, projDrag.startY);
+    }, TOUCH_LONG_PRESS);
+  }
+  window.addEventListener('pointermove', onProjMove);
+  window.addEventListener('pointerup', onProjUp);
+  window.addEventListener('pointercancel', onProjUp);
+}
+
+function onProjMove(e) {
+  if (!projDrag || e.pointerId !== projDrag.pointerId) return;
+  const dist = Math.hypot(e.clientX - projDrag.startX, e.clientY - projDrag.startY);
+
+  if (!projDrag.started) {
+    if (projDrag.pointerType === 'touch') {
+      if (dist > TOUCH_CANCEL_DIST) { clearTimeout(projDrag.longPressTimer); projCleanup(); }
+    } else if (dist > MOUSE_THRESHOLD) {
+      startProjDrag(e.clientX, e.clientY);
+    }
+    return;
+  }
+  e.preventDefault();
+  moveProjGhost(e.clientX, e.clientY);
+  updateProjDropTarget(e.clientY);
+}
+
+function startProjDrag(x, y) {
+  const rect = projDrag.itemEl.getBoundingClientRect();
+  projDrag.offsetX = projDrag.startX - rect.left;
+  projDrag.offsetY = projDrag.startY - rect.top;
+  projDrag.started = true;
+
+  const ghost = projDrag.itemEl.cloneNode(true);
+  ghost.classList.add('project-ghost');
+  ghost.style.width = rect.width + 'px';
+  document.body.appendChild(ghost);
+  projDrag.ghost = ghost;
+
+  projDrag.itemEl.classList.add('dragging');
+  document.body.classList.add('dragging-active');
+  try { projDrag.itemEl.setPointerCapture(projDrag.pointerId); } catch (_) {}
+
+  moveProjGhost(x, y);
+  updateProjDropTarget(y);
+  if (projDrag.pointerType === 'touch' && navigator.vibrate) navigator.vibrate(15);
+}
+
+function moveProjGhost(x, y) {
+  projDrag.ghost.style.left = (x - projDrag.offsetX) + 'px';
+  projDrag.ghost.style.top  = (y - projDrag.offsetY) + 'px';
+}
+
+function updateProjDropTarget(y) {
+  clearProjPlaceholders();
+  const list = document.getElementById('projectList');
+  const items = [...list.querySelectorAll('.project-item:not(.dragging):not(.all-item)')];
+
+  let insertBefore = null;
+  for (const it of items) {
+    const r = it.getBoundingClientRect();
+    if (y < r.top + r.height / 2) { insertBefore = it; break; }
+  }
+
+  const ph = document.createElement('div');
+  ph.className = 'project-drop-ph';
+  if (insertBefore) {
+    list.insertBefore(ph, insertBefore);
+    projDrag.insertBeforeId = insertBefore.querySelector('.project-name')?.dataset.pid || null;
+  } else {
+    list.appendChild(ph);
+    projDrag.insertBeforeId = null;
+  }
+}
+
+function onProjUp(e) {
+  if (!projDrag || e.pointerId !== projDrag.pointerId) return;
+  clearTimeout(projDrag.longPressTimer);
+  if (projDrag.started) performProjReorder();
+  projCleanup();
+}
+
+function performProjReorder() {
+  const arr = state.projects;
+  const from = arr.findIndex(p => p.id === projDrag.projId);
+  if (from < 0) return;
+  const [moved] = arr.splice(from, 1);
+  if (projDrag.insertBeforeId == null) {
+    arr.push(moved);
+  } else {
+    let to = arr.findIndex(p => p.id === projDrag.insertBeforeId);
+    if (to < 0) to = arr.length;
+    arr.splice(to, 0, moved);
+  }
+  save();
+  refreshAll();
+}
+
+function projCleanup() {
+  if (projDrag) {
+    if (projDrag.ghost) projDrag.ghost.remove();
+    if (projDrag.itemEl) projDrag.itemEl.classList.remove('dragging');
+    try { projDrag.itemEl.releasePointerCapture(projDrag.pointerId); } catch (_) {}
+  }
+  document.body.classList.remove('dragging-active');
+  clearProjPlaceholders();
+  window.removeEventListener('pointermove', onProjMove);
+  window.removeEventListener('pointerup', onProjUp);
+  window.removeEventListener('pointercancel', onProjUp);
+  projDrag = null;
+}
+
+function clearProjPlaceholders() {
+  document.querySelectorAll('.project-drop-ph').forEach(p => p.remove());
 }
