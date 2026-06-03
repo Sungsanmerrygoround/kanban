@@ -1,12 +1,14 @@
 // Service worker: caches app shell, serves offline, network-first when online.
 
-const CACHE = 'kanban-v19';
+const CACHE = 'kanban-v20';
 const SHELL = [
   './',
   './index.html',
   './styles.css',
   './manifest.webmanifest',
   './icon.svg',
+  './apple-touch-icon.png',
+  './icon-512.png',
   './src/main.js',
   './src/state.js',
   './src/refresh.js',
