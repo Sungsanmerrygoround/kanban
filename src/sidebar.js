@@ -39,6 +39,7 @@ export function renderSidebar() {
     const nameEl = item.querySelector('.project-name');
 
     item.addEventListener('click', e => {
+      if (item.dataset.suppressClick) return;        // ignore click synthesized after a drag-reorder
       if (e.target.closest('.project-delete')) return;
       if (nameEl.isContentEditable) return;
       switchProject(proj.id);
@@ -263,7 +264,16 @@ function updateProjDropTarget(y) {
 function onProjUp(e) {
   if (!projDrag || e.pointerId !== projDrag.pointerId) return;
   clearTimeout(projDrag.longPressTimer);
-  if (projDrag.started) performProjReorder();
+  if (projDrag.started) {
+    // Block the synthetic click that follows pointerup so a reorder doesn't
+    // also switch the active project (same guard as card/calendar drags).
+    const itemEl = projDrag.itemEl;
+    if (itemEl) {
+      itemEl.dataset.suppressClick = '1';
+      setTimeout(() => { delete itemEl.dataset.suppressClick; }, 300);
+    }
+    performProjReorder();
+  }
   projCleanup();
 }
 
