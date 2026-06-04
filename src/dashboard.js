@@ -4,7 +4,7 @@
 
 import {
   state, save, pushUndo, projectHue, activeViewId, viewName,
-  STD_COLUMNS, touchCard, filter, hasAdHocFilter,
+  STD_COLUMNS, touchCard, filter, hasAdHocFilter, moveCardToColumn,
 } from './state.js';
 import {
   allCards, matchesFilter, sortCards, isOverdue, isToday, isDone,
@@ -52,23 +52,23 @@ function renderAdHoc(wrap) {
 function renderToday(wrap) {
   const shown = new Set();
   const pool = allCards();
-  let total = 0;
 
   const pick = (predicate, sortBy) => {
     const got = sortCards(
       pool.filter(e => !shown.has(e.card.id) && predicate(e)), sortBy);
     got.forEach(e => shown.add(e.card.id));
-    total += got.length;
     return got;
   };
 
+  // Completed cards never belong in the actionable "오늘" view (so checking a
+  // card off makes it leave the list instead of resurfacing in 최근 편집).
   const overdue  = pick(e => !isDone(e) && isOverdue(e.card), 'due');
   const today    = pick(e => !isDone(e) && isToday(e.card),  'smart');
-  const doing    = pick(e => e.col.title === STD_COLUMNS[1], 'smart'); // 진행 중
-  const recent   = pick(e => !!e.card.updatedAt, 'updated').slice(0, 8);
+  const doing    = pick(e => !isDone(e) && e.col.title === STD_COLUMNS[1], 'smart'); // 진행 중
+  const recent   = pick(e => !isDone(e) && !!e.card.updatedAt, 'updated').slice(0, 8);
 
-  const heading = `${todayLabel()} · 오늘`;
-  wrap.appendChild(dashHead(heading, total));
+  const total = overdue.length + today.length + doing.length + recent.length;
+  wrap.appendChild(dashHead(`${todayLabel()} · 오늘`, total));
 
   if (total === 0) {
     wrap.appendChild(emptyState('오늘 처리할 카드가 없어요 ✨'));
@@ -180,8 +180,7 @@ function completeCard(entry) {
   const dest = project.columns.find(c => c.title === STD_COLUMNS[2]); // 완료
   if (!dest || dest === col) return;
   pushUndo();
-  col.cards = col.cards.filter(c => c.id !== card.id);
-  dest.cards.push(card);
+  moveCardToColumn(card, col, dest);
   touchCard(card);
   save();
   refreshAll();

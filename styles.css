@@ -167,14 +167,6 @@ body {
   box-shadow: 0 0 0 2px hsl(var(--ph), 58%, 80%);
 }
 
-.project-icon {
-  font-size: 1rem;
-  flex-shrink: 0;
-  width: 20px;
-  text-align: center;
-  line-height: 1;
-}
-
 .project-name {
   flex: 1;
   white-space: nowrap;
@@ -2833,9 +2825,6 @@ body.all-view #addColNavBtn { display: none; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* The pinned 전체 sidebar item has no project-delete; keep its count visible. */
-.project-item.all-item:hover .project-count { display: inline-block; }
-
 /* Project-name prefix on calendar chips / span bars. */
 .cal-proj {
   font-weight: 700;
@@ -3025,7 +3014,9 @@ body.dashboard-view .view-toggle { display: none; }
   background: var(--surface); overflow-x: auto;
 }
 .fb-group { display: flex; align-items: center; gap: 0.35rem; min-width: 0; }
-.fb-group.fb-tags { flex-wrap: wrap; }
+/* Tags can be numerous — keep them on one scrollable line instead of growing tall. */
+.fb-group.fb-tags { flex: 1 1 100%; flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; }
+.fb-group.fb-tags .fb-label { position: sticky; left: 0; background: var(--surface); padding-right: 0.2rem; }
 .fb-label { font-size: 0.72rem; font-weight: 700; color: var(--muted2); margin-right: 0.15rem; }
 .fb-chip {
   border: 1px solid var(--border2); background: var(--bg); color: var(--muted2);
@@ -3041,6 +3032,14 @@ body.dashboard-view .view-toggle { display: none; }
 }
 .fb-save { background: var(--accent); border-color: var(--accent); color: #fff; }
 .fb-btn:hover { filter: brightness(0.95); }
+
+/* Command-palette button */
+.palette-btn .kbd-hint {
+  font-size: 0.66rem; font-weight: 700; color: var(--muted);
+  border: 1px solid var(--border2); border-radius: var(--r-xs);
+  padding: 0 0.25rem; margin-left: 0.1rem;
+}
+@media (max-width: 768px) { .palette-btn .kbd-hint { display: none; } }
 
 /* Filter button badge in the navbar */
 #filterBtn { position: relative; }

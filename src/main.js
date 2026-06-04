@@ -17,6 +17,7 @@ import { initFilterBar } from './filterbar.js';
 // ── Wire global events ──────────────────────────────────────────────────────
 document.getElementById('addColNavBtn').addEventListener('click', addColumn);
 document.getElementById('addProjectBtn').addEventListener('click', addProject);
+document.getElementById('paletteBtn').addEventListener('click', openPalette);
 
 document.getElementById('searchInput').addEventListener('input', e => {
   filter.query = e.target.value;

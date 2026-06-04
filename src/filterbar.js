@@ -30,6 +30,10 @@ export function renderFilterBar() {
   const bar = document.getElementById('filterBar');
   if (!bar || bar.hidden) return;
 
+  // Preserve the tag row's horizontal scroll across rebuilds (toggling a chip
+  // re-renders the whole bar via refreshAll).
+  const prevTagScroll = bar.querySelector('.fb-tags')?.scrollLeft || 0;
+
   const tags = [...new Set(allCards().flatMap(e => e.card.tags || []))]
     .sort((a, b) => a.localeCompare(b, 'ko'));
 
@@ -49,6 +53,9 @@ export function renderFilterBar() {
     c.addEventListener('click', () => onChip(c.dataset.type, c.dataset.val)));
   bar.querySelector('#fbSave').addEventListener('click', saveCurrentView);
   bar.querySelector('#fbClear').addEventListener('click', clearFilters);
+
+  const tagsEl = bar.querySelector('.fb-tags');
+  if (tagsEl) tagsEl.scrollLeft = prevTagScroll;
 }
 
 function chip(type, val, label, active) {
