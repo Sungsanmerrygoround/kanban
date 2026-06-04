@@ -3,7 +3,7 @@
 
 import {
   save, findCard, getColById, activeColumns, activeProject, tagColor, state, pushUndo,
-  setActiveProject, touchCard,
+  setActiveProject, touchCard, moveCardToColumn,
 } from './state.js';
 import { escHtml, renderMarkdown, compressImageBlob, nextDueDate } from './utils.js';
 import { refreshAll } from './refresh.js';
@@ -149,10 +149,7 @@ function saveModal() {
   Object.assign(card, form);
   touchCard(card);
 
-  if (newColId !== srcCol.id) {
-    srcCol.cards = srcCol.cards.filter(c => c.id !== m.cardId);
-    getColById(newColId).cards.push(card);
-  }
+  if (newColId !== srcCol.id) moveCardToColumn(card, srcCol, getColById(newColId));
 
   save();
   refreshAll();
@@ -688,10 +685,7 @@ function saveNotePageData() {
   card.tags     = [...np.tags];
   touchCard(card);
 
-  if (newColId !== srcCol.id) {
-    srcCol.cards = srcCol.cards.filter(c => c.id !== np.cardId);
-    getColById(newColId).cards.push(card);
-  }
+  if (newColId !== srcCol.id) moveCardToColumn(card, srcCol, getColById(newColId));
 
   save();
   refreshAll();

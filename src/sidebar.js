@@ -3,7 +3,7 @@
 import {
   state, save, activeProject, filter, projectHue,
   ALL_PROJECT_ID, isAllView, VIEW_PREFIX, isViewActive, activeViewId, BUILTIN_VIEWS,
-  hasAdHocFilter,
+  hasAdHocFilter, viewName,
 } from './state.js';
 import {
   allCards, matchesFilter, isOverdue, isToday, isWithinDays, isDone,
@@ -81,19 +81,12 @@ export function renderNavbarTitle() {
   let title;
   if (hasAdHocFilter())     title = '필터 결과';
   else if (isAllView())     title = '전체';
-  else if (isViewActive())  title = viewLabel(activeViewId());
+  else if (isViewActive())  title = viewName(activeViewId());
   else                      title = activeProject().name;
   document.getElementById('projectTitleName').textContent = title;
 }
 
 // ── View list (전체 + smart views + saved views) ─────────────────────────────
-function viewLabel(id) {
-  const b = BUILTIN_VIEWS.find(v => v.id === id);
-  if (b) return b.name;
-  const sv = (state.savedViews || []).find(v => v.id === id);
-  return sv ? sv.name : '뷰';
-}
-
 function viewCounts() {
   const cards = allCards();
   const c = { all: cards.length, today: 0, week: 0, overdue: 0, saved: {} };

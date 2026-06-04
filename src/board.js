@@ -3,7 +3,7 @@
 import {
   state, activeProject, activeColumns, getColById, matchesSearch, filter,
   save, setActiveProject, COL_COLORS, pushUndo, isAllView, STD_COLUMNS,
-  findCardAnywhere, ALL_PROJECT_ID,
+  findCardAnywhere, ALL_PROJECT_ID, moveCardToColumn,
 } from './state.js';
 import {
   uid, escHtml, MOUSE_THRESHOLD, TOUCH_LONG_PRESS, TOUCH_CANCEL_DIST,
@@ -292,8 +292,7 @@ function performAllDrop() {
   const dest = project.columns.find(c => c.title === allDrag.targetStatus);
   if (!dest || dest === col) return;     // unknown status or same column → no-op
   pushUndo();
-  col.cards = col.cards.filter(c => c.id !== card.id);
-  dest.cards.push(card);
+  moveCardToColumn(card, col, dest);
   save();
   refreshAll();
 }

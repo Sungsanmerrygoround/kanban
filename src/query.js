@@ -3,7 +3,7 @@
 // arrays of { card, col, project } entries.
 
 import { state, STD_COLUMNS } from './state.js';
-import { daysUntil } from './utils.js';
+import { daysUntil, PRIORITY_ORDER, cardMatchesText } from './utils.js';
 
 // Iterate every card across all projects as { card, col, project } entries.
 export function allCards({ includeArchived = false } = {}) {
@@ -62,13 +62,7 @@ export function matchesFilter(entry, filter) {
 
   if (filter.projectId && project.id !== filter.projectId) return false;
 
-  if (filter.query) {
-    const q = filter.query.toLowerCase();
-    const hit = card.title.toLowerCase().includes(q)
-      || (card.desc || '').toLowerCase().includes(q)
-      || (card.tags || []).some(t => t.toLowerCase().includes(q));
-    if (!hit) return false;
-  }
+  if (filter.query && !cardMatchesText(card, filter.query)) return false;
 
   if (filter.priorities && filter.priorities.length) {
     if (!filter.priorities.includes(card.priority)) return false;
@@ -90,8 +84,6 @@ export function matchesFilter(entry, filter) {
 }
 
 // ── Sorting ──────────────────────────────────────────────────────────────────
-const PRIORITY_ORDER = { high: 0, medium: 1, low: 2, none: 3 };
-
 function dueKey(card) {
   const d = daysUntil(card.due);
   return d === null ? Infinity : d; // undated cards sink to the bottom

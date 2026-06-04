@@ -35,6 +35,15 @@ export function displayTitle(title) {
   return stripped || title;   // fallback if title was *only* emoji
 }
 
+// Case-insensitive text match across a card's title / desc / tags.
+export function cardMatchesText(card, query) {
+  if (!query) return true;
+  const q = query.toLowerCase();
+  return card.title.toLowerCase().includes(q)
+    || (card.desc || '').toLowerCase().includes(q)
+    || (card.tags || []).some(t => t.toLowerCase().includes(q));
+}
+
 export function escHtml(s) {
   return String(s)
     .replace(/&/g, '&amp;')
@@ -95,6 +104,11 @@ export const RECURRENCE_LABELS = {
   weekly:  '매주',
   monthly: '매월',
 };
+
+// ── Priority metadata (single source of truth) ───────────────────────────────
+export const PRIORITY_LABELS = { high: '높음', medium: '중간', low: '낮음' };
+export const PRIORITY_COLORS = { high: 'red', medium: 'yellow', low: 'green' };
+export const PRIORITY_ORDER  = { high: 0, medium: 1, low: 2, none: 3 };
 
 // ── Tiny Markdown renderer (safe: input is escaped first) ───────────────────
 // Supports: # ## ###, **bold**, *italic*, `code`, [text](url),

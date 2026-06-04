@@ -4,7 +4,7 @@ import {
   state, findCardAnywhere, setActiveProject, save, pushUndo, projectHue,
 } from './state.js';
 import {
-  escHtml, displayTitle, ymd,
+  escHtml, displayTitle, ymd, PRIORITY_ORDER,
   MOUSE_THRESHOLD, TOUCH_LONG_PRESS, TOUCH_CANCEL_DIST,
 } from './utils.js';
 import { openModal } from './modal.js';
@@ -315,11 +315,10 @@ function collectAllCards() {
     }
   }
   // Sort single-day buckets by priority then title.
-  const order = { high: 0, medium: 1, low: 2, none: 3 };
   for (const k of Object.keys(singleByDate)) {
     singleByDate[k].sort((a, b) => {
-      const pa = order[a.card.priority] ?? 3;
-      const pb = order[b.card.priority] ?? 3;
+      const pa = PRIORITY_ORDER[a.card.priority] ?? 3;
+      const pb = PRIORITY_ORDER[b.card.priority] ?? 3;
       if (pa !== pb) return pa - pb;
       return a.card.title.localeCompare(b.card.title, 'ko');
     });

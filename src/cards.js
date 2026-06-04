@@ -1,10 +1,11 @@
 ﻿// Card rendering, inline add form, pointer-based boardDrag & drop (mouse + touch).
 
 import {
-  save, getColById, findCard, tagColor, state, pushUndo, projectHue,
+  save, getColById, findCard, tagColor, state, pushUndo, projectHue, makeCard,
 } from './state.js';
 import {
-  uid, escHtml, dueStatus, formatDue, displayTitle, RECURRENCE_LABELS,
+  escHtml, dueStatus, formatDue, displayTitle, RECURRENCE_LABELS,
+  PRIORITY_LABELS, PRIORITY_COLORS,
   MOUSE_THRESHOLD, TOUCH_LONG_PRESS, TOUCH_CANCEL_DIST,
 } from './utils.js';
 import { refreshAll } from './refresh.js';
@@ -272,17 +273,14 @@ export function submitQuickForm(colId) {
   if (tplId) {
     const t = (state.templates || []).find(x => x.id === tplId);
     if (t) {
-      col.cards.push({
-        id: uid(),
+      col.cards.push(makeCard({
         title: title || t.title,
         desc: t.desc || '',
         priority: t.priority || 'none',
         tags: [...(t.tags || [])],
-        due: '',
         checklist: (t.checklist || []).map(i => ({ text: i.text, done: false })),
         recurrence: t.recurrence || 'none',
-        updatedAt: Date.now(),
-      });
+      }));
       ta.value = '';
       if (tplSel) tplSel.value = '';
       save();
@@ -292,10 +290,7 @@ export function submitQuickForm(colId) {
   }
 
   if (!title) return;
-  col.cards.push({
-    id: uid(), title, desc: '', priority: 'none', tags: [], due: '',
-    checklist: [], recurrence: 'none', updatedAt: Date.now(),
-  });
+  col.cards.push(makeCard({ title }));
   ta.value = '';
   save();
   refreshAll();
@@ -319,9 +314,6 @@ function afterElementAt(container, y) {
 function clearPlaceholders() {
   document.querySelectorAll('.drop-ph').forEach(p => p.remove());
 }
-
-const PRIORITY_LABELS = { high: '높음', medium: '중간', low: '낮음' };
-const PRIORITY_COLORS = { high: 'red', medium: 'yellow', low: 'green' };
 
 function stripMarkdown(s) {
   return s

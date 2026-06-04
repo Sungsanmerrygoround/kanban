@@ -1,7 +1,7 @@
 // Application state, persistence, sample data, and lookup helpers.
 
 import { writeUserState } from './sync.js';
-import { uid } from './utils.js';
+import { uid, cardMatchesText } from './utils.js';
 
 // Virtual project id for the cross-project "전체" aggregate board.
 export const ALL_PROJECT_ID = '__all__';
@@ -36,6 +36,22 @@ export const STD_COLUMNS = ['할 일', '진행 중', '완료'];
 
 // Stamp a card's last-edited time (drives the "최근 편집" dashboard section).
 export function touchCard(card) { if (card) card.updatedAt = Date.now(); }
+
+// Build a card with default fields; pass overrides for title/tags/etc.
+export function makeCard(overrides = {}) {
+  return {
+    id: uid(), title: '', desc: '', priority: 'none', tags: [],
+    start: '', due: '', checklist: [], recurrence: 'none',
+    updatedAt: Date.now(), ...overrides,
+  };
+}
+
+// Move a card from one column to another (append). No-op on same/missing column.
+export function moveCardToColumn(card, fromCol, toCol) {
+  if (!card || !fromCol || !toCol || fromCol === toCol) return;
+  fromCol.cards = fromCol.cards.filter(c => c.id !== card.id);
+  toCol.cards.push(card);
+}
 
 // Unique per browser tab — used to ignore our own snapshot echoes.
 export const clientId = (crypto.randomUUID && crypto.randomUUID()) ||
@@ -376,9 +392,5 @@ export function setActiveProject(id) {
 
 // ── Search filter ───────────────────────────────────────────────────────────
 export function matchesSearch(card) {
-  if (!filter.query) return true;
-  const q = filter.query.toLowerCase();
-  return card.title.toLowerCase().includes(q) ||
-    (card.desc || '').toLowerCase().includes(q) ||
-    card.tags.some(t => t.toLowerCase().includes(q));
+  return cardMatchesText(card, filter.query);
 }

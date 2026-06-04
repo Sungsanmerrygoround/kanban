@@ -3,10 +3,10 @@
 
 import {
   state, ALL_PROJECT_ID, VIEW_PREFIX, BUILTIN_VIEWS, activeProject,
-  pushUndo, save, projectHue,
+  pushUndo, save, projectHue, makeCard,
 } from './state.js';
 import { allCards } from './query.js';
-import { uid, escHtml } from './utils.js';
+import { escHtml } from './utils.js';
 import { switchProject, addProject } from './sidebar.js';
 import { setView, refreshAll } from './refresh.js';
 import { openModal, flashMsg } from './modal.js';
@@ -137,10 +137,7 @@ function parseQuickAdd(s) {
 function createQuickCard(project, title, tags) {
   const col = project.columns.find(c => c.title === '할 일') || project.columns[0];
   pushUndo();
-  col.cards.push({
-    id: uid(), title, desc: '', priority: 'none', tags: [...tags],
-    due: '', checklist: [], recurrence: 'none', updatedAt: Date.now(),
-  });
+  col.cards.push(makeCard({ title, tags: [...tags] }));
   save();
   switchProject(project.id); // surface the new card's project
   closePalette();
