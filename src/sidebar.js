@@ -1,27 +1,23 @@
 // Left sidebar: project tree rendering + project CRUD (add / switch / delete / rename).
 
-import { state, save, activeProject, filter, projectHue, ALL_PROJECT_ID, isAllView } from './state.js';
+import {
+  state, save, activeProject, filter, projectHue,
+  ALL_PROJECT_ID, isAllView, VIEW_PREFIX, isViewActive, activeViewId, BUILTIN_VIEWS,
+  hasAdHocFilter,
+} from './state.js';
+import {
+  allCards, matchesFilter, isOverdue, isToday, isWithinDays, isDone,
+} from './query.js';
 import { uid, escHtml, MOUSE_THRESHOLD, TOUCH_LONG_PRESS, TOUCH_CANCEL_DIST } from './utils.js';
 import { refreshAll } from './refresh.js';
 
 // ── Render ──────────────────────────────────────────────────────────────────
 export function renderSidebar() {
+  renderViewList();
+
   const list = document.getElementById('projectList');
   list.innerHTML = '';
   const statsEl = document.getElementById('sidebarStats');
-
-  // Pinned "전체" aggregate (all projects). Not a real project — no delete/rename.
-  const allCards = state.projects.reduce((s, p) =>
-    s + p.columns.reduce((s2, c) => s2 + c.cards.filter(cd => !cd.archived).length, 0), 0);
-  const allItem = document.createElement('div');
-  allItem.className = 'project-item all-item' + (isAllView() ? ' active' : '');
-  allItem.innerHTML = `
-    <span class="project-icon">📋</span>
-    <span class="project-name">전체</span>
-    <span class="project-count">${allCards}</span>
-  `;
-  allItem.addEventListener('click', () => switchProject(ALL_PROJECT_ID));
-  list.appendChild(allItem);
 
   state.projects.forEach(proj => {
     const liveCards = proj.columns.reduce((sum, c) => sum + c.cards.filter(cd => !cd.archived).length, 0);
@@ -82,15 +78,108 @@ export function renderSidebar() {
 }
 
 export function renderNavbarTitle() {
-  document.getElementById('projectTitleName').textContent =
-    isAllView() ? '전체' : activeProject().name;
+  let title;
+  if (hasAdHocFilter())     title = '필터 결과';
+  else if (isAllView())     title = '전체';
+  else if (isViewActive())  title = viewLabel(activeViewId());
+  else                      title = activeProject().name;
+  document.getElementById('projectTitleName').textContent = title;
+}
+
+// ── View list (전체 + smart views + saved views) ─────────────────────────────
+function viewLabel(id) {
+  const b = BUILTIN_VIEWS.find(v => v.id === id);
+  if (b) return b.name;
+  const sv = (state.savedViews || []).find(v => v.id === id);
+  return sv ? sv.name : '뷰';
+}
+
+function viewCounts() {
+  const cards = allCards();
+  const c = { all: cards.length, today: 0, week: 0, overdue: 0, saved: {} };
+  for (const e of cards) {
+    const done = isDone(e);
+    if (!done && isOverdue(e.card)) { c.overdue++; c.today++; }
+    else if (!done && isToday(e.card)) { c.today++; }
+    if (!done && isWithinDays(e.card, 7)) c.week++;
+  }
+  for (const sv of (state.savedViews || [])) {
+    c.saved[sv.id] = cards.filter(e => matchesFilter(e, sv.filter)).length;
+  }
+  return c;
+}
+
+function renderViewList() {
+  const wrap = document.getElementById('viewList');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  const counts = viewCounts();
+
+  wrap.appendChild(buildViewItem({
+    sel: ALL_PROJECT_ID, icon: '📋', name: '전체', count: counts.all,
+    active: isAllView(),
+  }));
+
+  const curView = isViewActive() ? activeViewId() : null;
+  BUILTIN_VIEWS.forEach(v => {
+    wrap.appendChild(buildViewItem({
+      sel: VIEW_PREFIX + v.id, icon: v.icon, name: v.name, count: counts[v.id] || 0,
+      active: curView === v.id,
+    }));
+  });
+
+  (state.savedViews || []).forEach(v => {
+    wrap.appendChild(buildViewItem({
+      sel: VIEW_PREFIX + v.id, icon: v.icon || '🔖', name: v.name,
+      count: counts.saved[v.id] || 0, active: curView === v.id, savedId: v.id,
+    }));
+  });
+}
+
+function buildViewItem({ sel, icon, name, count, active, savedId }) {
+  const item = document.createElement('div');
+  item.className = 'view-item' + (active ? ' active' : '');
+  item.innerHTML = `
+    <span class="view-icon">${icon}</span>
+    <span class="view-name">${escHtml(name)}</span>
+    <span class="view-count">${count}</span>
+    ${savedId ? '<button class="view-delete" title="뷰 삭제">×</button>' : ''}
+  `;
+  item.addEventListener('click', (e) => {
+    if (e.target.closest('.view-delete')) return;
+    switchProject(sel);
+  });
+  if (savedId) {
+    item.querySelector('.view-delete').addEventListener('click', (e) => {
+      e.stopPropagation();
+      deleteSavedView(savedId);
+    });
+  }
+  return item;
+}
+
+function deleteSavedView(id) {
+  const sv = (state.savedViews || []).find(v => v.id === id);
+  if (!sv) return;
+  if (!confirm(`"${sv.name}" 뷰를 삭제할까요?`)) return;
+  state.savedViews = state.savedViews.filter(v => v.id !== id);
+  if (isViewActive() && activeViewId() === id) {
+    state.activeProjectId = state.projects[0].id;
+  }
+  save();
+  refreshAll();
 }
 
 // ── Actions ─────────────────────────────────────────────────────────────────
 export function switchProject(id) {
-  if (state.activeProjectId === id) return;
+  // No-op only when nothing would change (same selection, no active filters).
+  if (state.activeProjectId === id && !filter.query && !hasAdHocFilter()) return;
   state.activeProjectId = id;
   filter.query = '';
+  filter.tags = [];
+  filter.priorities = [];
+  filter.due = null;
+  filter.projectId = null;
   const si = document.getElementById('searchInput');
   if (si) si.value = '';
   save();

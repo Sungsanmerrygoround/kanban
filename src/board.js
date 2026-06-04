@@ -3,7 +3,7 @@
 import {
   state, activeProject, activeColumns, getColById, matchesSearch, filter,
   save, setActiveProject, COL_COLORS, pushUndo, isAllView, STD_COLUMNS,
-  findCardAnywhere,
+  findCardAnywhere, ALL_PROJECT_ID,
 } from './state.js';
 import {
   uid, escHtml, MOUSE_THRESHOLD, TOUCH_LONG_PRESS, TOUCH_CANCEL_DIST,
@@ -184,7 +184,7 @@ function buildAllCard(card, project) {
   el.addEventListener('click', () => {
     if (el.dataset.suppressClick) return;
     // Open in the card's own project, but return to the 전체 board on close.
-    openModal(card.id, { projectId: project.id, returnToAll: true });
+    openModal(card.id, { projectId: project.id, returnTo: ALL_PROJECT_ID });
   });
   el.addEventListener('pointerdown', (e) => onAllPointerDown(e, card, project, el));
   return el;

@@ -103,6 +103,10 @@ export function renderMarkdown(src) {
   if (!src) return '';
   let s = escHtml(src);
 
+  // wiki links [[Title]] → clickable (resolved by title on click)
+  s = s.replace(/\[\[([^\]\n]+)\]\]/g,
+    '<a class="wikilink" data-wikilink="$1">$1</a>');
+
   // images: ![alt](url) — only data:, http(s)
   s = s.replace(/!\[([^\]]*)\]\(((?:data:image|https?:)[^)]+)\)/g,
     (_, alt, url) => `<img alt="${alt}" src="${url}" class="md-img" />`);

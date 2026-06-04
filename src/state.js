@@ -7,8 +7,35 @@ import { uid } from './utils.js';
 export const ALL_PROJECT_ID = '__all__';
 export function isAllView() { return state.activeProjectId === ALL_PROJECT_ID; }
 
+// Smart views (today dashboard / saved filters) live behind this namespace in
+// activeProjectId, e.g. '__view__:today' or '__view__:<savedId>'.
+export const VIEW_PREFIX = '__view__:';
+export function isViewActive() {
+  return typeof state.activeProjectId === 'string'
+    && state.activeProjectId.startsWith(VIEW_PREFIX);
+}
+export function activeViewId() {
+  return isViewActive() ? state.activeProjectId.slice(VIEW_PREFIX.length) : null;
+}
+
+// Built-in smart views (always available). Saved views are user-defined.
+export const BUILTIN_VIEWS = [
+  { id: 'today',   name: '오늘',    icon: '📅' },
+  { id: 'week',    name: '이번 주', icon: '🗓️' },
+  { id: 'overdue', name: '지연됨',  icon: '⚠️' },
+];
+export function viewName(id) {
+  const b = BUILTIN_VIEWS.find(v => v.id === id);
+  if (b) return b.name;
+  const sv = (state.savedViews || []).find(v => v.id === id);
+  return sv ? sv.name : '뷰';
+}
+
 // Standard column set every project is unified to.
 export const STD_COLUMNS = ['할 일', '진행 중', '완료'];
+
+// Stamp a card's last-edited time (drives the "최근 편집" dashboard section).
+export function touchCard(card) { if (card) card.updatedAt = Date.now(); }
 
 // Unique per browser tab — used to ignore our own snapshot echoes.
 export const clientId = (crypto.randomUUID && crypto.randomUUID()) ||
@@ -126,7 +153,13 @@ export let state = structuredClone(SAMPLE_STATE);
 const tagColorMap = {};
 let tagIdx = 0;
 
-export const filter = { query: '' };
+export const filter = { query: '', tags: [], priorities: [], due: null, projectId: null };
+
+// True when an ad-hoc filter (priority/tag/due chips) is active — drives the
+// transient "필터 결과" dashboard, independent of the active project/view.
+export function hasAdHocFilter() {
+  return !!(filter.due || filter.priorities.length || filter.tags.length);
+}
 
 // ── Undo / Redo ──────────────────────────────────────────────────────────────
 const MAX_UNDO = 50;
@@ -199,12 +232,22 @@ function applyShapeGuards() {
     state.projects.forEach(migrateProjectColumns);
     state.schemaVersion = 1;
   }
-  // Keep the "전체" virtual selection; otherwise fall back to a real project.
-  if (state.activeProjectId !== ALL_PROJECT_ID &&
-      (!state.activeProjectId || !state.projects.find(p => p.id === state.activeProjectId))) {
+  // Keep virtual selections ("전체" / smart views); otherwise fall back to a
+  // real project. A custom saved view whose id no longer exists also falls back.
+  const ap = state.activeProjectId;
+  const isAll = ap === ALL_PROJECT_ID;
+  const isView = typeof ap === 'string' && ap.startsWith(VIEW_PREFIX);
+  const viewOk = isView && (() => {
+    const id = ap.slice(VIEW_PREFIX.length);
+    return BUILTIN_VIEWS.some(v => v.id === id)
+      || (state.savedViews || []).some(v => v.id === id);
+  })();
+  if (!isAll && !viewOk &&
+      (!ap || isView || !state.projects.find(p => p.id === ap))) {
     state.activeProjectId = state.projects[0].id;
   }
   if (!Array.isArray(state.templates)) state.templates = [];
+  if (!Array.isArray(state.savedViews)) state.savedViews = [];
 }
 
 // Rebuild a project's columns into exactly [할 일, 진행 중, 완료], bucketing the

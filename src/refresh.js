@@ -4,7 +4,9 @@
 import { renderSidebar, renderNavbarTitle } from './sidebar.js';
 import { renderBoard } from './board.js';
 import { renderCalendar } from './calendar.js';
-import { filter, isAllView } from './state.js';
+import { renderDashboard } from './dashboard.js';
+import { renderFilterBar } from './filterbar.js';
+import { filter, isAllView, isViewActive, hasAdHocFilter } from './state.js';
 
 const VIEW_KEY = 'kb_view_mode';
 let viewMode = localStorage.getItem(VIEW_KEY) || 'board';
@@ -32,11 +34,17 @@ function syncToggleUI() {
 }
 
 export function refreshAll() {
+  const adhoc = hasAdHocFilter();
   document.body.classList.toggle('all-view', isAllView());
+  document.body.classList.toggle('dashboard-view', isViewActive() || adhoc);
   renderSidebar();
   renderNavbarTitle();
-  // Search always falls back to the board view's cross-project search results.
-  if (filter.query || viewMode === 'board') renderBoard();
-  else renderCalendar();
+  // Text search → cross-project board results; ad-hoc filter / smart view → dashboard.
+  if (filter.query)          renderBoard();
+  else if (adhoc)            renderDashboard();
+  else if (isViewActive())   renderDashboard();
+  else if (viewMode === 'board') renderBoard();
+  else                       renderCalendar();
+  renderFilterBar();
   syncToggleUI();
 }

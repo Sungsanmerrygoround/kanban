@@ -34,6 +34,8 @@
     </button>
   </div>
   <div class="sidebar-divider"></div>
+  <div class="section-title">뷰</div>
+  <div class="view-list" id="viewList"></div>
   <div class="section-title">프로젝트</div>
   <div class="project-list" id="projectList"></div>
   <div class="sidebar-stats" id="sidebarStats"></div>
@@ -77,6 +79,10 @@
       <button class="btn notif-btn" id="notifBtn" title="알림 켜기" aria-label="알림">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
       </button>
+      <button class="btn" id="filterBtn" title="필터">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+        필터<span class="filter-badge" id="filterBadge" hidden></span>
+      </button>
       <button class="btn" id="archiveOpenBtn" title="아카이브">
         📦 아카이브
       </button>
@@ -88,6 +94,8 @@
       </button>
     </div>
   </nav>
+
+  <div class="filter-bar" id="filterBar" hidden></div>
 
   <div class="board" id="board"></div>
 </div>
@@ -105,6 +113,16 @@
       <button class="btn" id="authSignUp">가입</button>
     </div>
     <div class="auth-msg" id="authMsg"></div>
+  </div>
+</div>
+
+<!-- Command palette (⌘K) -->
+<div class="palette-overlay" id="paletteOverlay">
+  <div class="palette" role="dialog" aria-label="명령 팔레트">
+    <input class="palette-input" id="paletteInput" type="text" autocomplete="off"
+           placeholder="카드·프로젝트 검색…   ( &gt; 입력 시 빠른 카드 추가 )" />
+    <div class="palette-results" id="paletteResults"></div>
+    <div class="palette-hint">↑↓ 이동 · ↵ 실행 · esc 닫기 · <b>&gt;</b> 빠른 추가 (<b>@</b>프로젝트 <b>#</b>태그)</div>
   </div>
 </div>
 
@@ -214,6 +232,14 @@
         <div class="tags-box" id="tagsBox">
           <input class="tags-text" id="tagsText" placeholder="태그 입력..." />
         </div>
+      </div>
+
+      <div class="field backlinks-field" id="mBacklinksField" hidden>
+        <label class="field-label">
+          <svg class="field-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          백링크 <span class="field-hint" id="mBacklinksCount"></span>
+        </label>
+        <div class="backlinks-list" id="mBacklinks"></div>
       </div>
     </div>
 

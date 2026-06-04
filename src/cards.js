@@ -281,6 +281,7 @@ export function submitQuickForm(colId) {
         due: '',
         checklist: (t.checklist || []).map(i => ({ text: i.text, done: false })),
         recurrence: t.recurrence || 'none',
+        updatedAt: Date.now(),
       });
       ta.value = '';
       if (tplSel) tplSel.value = '';
@@ -293,7 +294,7 @@ export function submitQuickForm(colId) {
   if (!title) return;
   col.cards.push({
     id: uid(), title, desc: '', priority: 'none', tags: [], due: '',
-    checklist: [], recurrence: 'none',
+    checklist: [], recurrence: 'none', updatedAt: Date.now(),
   });
   ta.value = '';
   save();

@@ -3,18 +3,20 @@
 
 import {
   save, findCard, getColById, activeColumns, activeProject, tagColor, state, pushUndo,
-  setActiveProject, ALL_PROJECT_ID,
+  setActiveProject, touchCard,
 } from './state.js';
 import { escHtml, renderMarkdown, compressImageBlob, nextDueDate } from './utils.js';
 import { refreshAll } from './refresh.js';
 import { uid } from './utils.js';
+import { allCards, findCardByTitle, backlinksTo } from './query.js';
+import { projectHue } from './state.js';
 
 // ── Per-open state ──────────────────────────────────────────────────────────
 // Note page state
 const np = {
   cardId:    null,
   fromModal: false,
-  returnToAll: false,
+  returnTo:  null,
   priority:  'none',
   tags:      [],
   viewMode:  'edit',
@@ -27,18 +29,19 @@ const m = {
   tags: [],
   checklist: [],
   recurrence: 'none',
-  returnToAll: false,   // opened from the "전체" view → restore it on close
+  returnTo: null,   // selection (전체/뷰) to restore on close, if opened from one
 };
 
 // ── Open / close ────────────────────────────────────────────────────────────
 export function openModal(cardId, opts = {}) {
-  // When opened from the cross-project "전체" board, switch to the card's own
-  // project first (the modal edits the active project) and remember to return.
+  // When opened from a cross-project surface (전체 / smart view), remember where
+  // to return, then switch to the card's own project (the modal edits the
+  // active project).
+  m.returnTo = opts.returnTo || null;
   if (opts.projectId && opts.projectId !== state.activeProjectId) {
     setActiveProject(opts.projectId);
     refreshAll();
   }
-  m.returnToAll = !!opts.returnToAll;
 
   const result = findCard(cardId);
   if (!result) return;
@@ -74,6 +77,7 @@ export function openModal(cardId, opts = {}) {
   renderTagPills();
   renderChecklist();
   applyPriorityStrip();
+  renderBacklinks(cardId, card.title);
 
   document.getElementById('overlay').classList.add('open');
   document.getElementById('mTitle').focus();
@@ -92,14 +96,15 @@ function autoResize(el) {
 }
 
 export function closeModal() {
+  hideAc();
   document.getElementById('overlay').classList.remove('open');
-  const returnToAll = m.returnToAll;
+  const returnTo = m.returnTo;
   m.cardId = null;
   m.colId  = null;
-  m.returnToAll = false;
-  // If this card was opened from the "전체" board, go back to it.
-  if (returnToAll && state.activeProjectId !== ALL_PROJECT_ID) {
-    state.activeProjectId = ALL_PROJECT_ID;
+  m.returnTo = null;
+  // If opened from 전체 / a smart view, restore that selection.
+  if (returnTo && state.activeProjectId !== returnTo) {
+    state.activeProjectId = returnTo;
     refreshAll();
   }
 }
@@ -142,6 +147,7 @@ function saveModal() {
 
   pushUndo();
   Object.assign(card, form);
+  touchCard(card);
 
   if (newColId !== srcCol.id) {
     srcCol.cards = srcCol.cards.filter(c => c.id !== m.cardId);
@@ -200,8 +206,8 @@ function duplicateCard() {
   const result = findCard(m.cardId);
   if (!result) return;
   const { card, col } = result;
-  // Preserve "전체"-view origin so the clone's modal also returns there.
-  const returnToAll = m.returnToAll;
+  // Preserve cross-project origin so the clone's modal also returns there.
+  const returnTo = m.returnTo;
   const projId = state.activeProjectId;
 
   // Apply any unsaved edits to source before cloning, so the clone reflects them.
@@ -213,6 +219,7 @@ function duplicateCard() {
     title: card.title + ' (복사)',
     checklist: (card.checklist || []).map(i => ({ text: i.text, done: false })),
     archived: false,
+    updatedAt: Date.now(),
   };
   delete clone.archivedAt;
 
@@ -225,7 +232,7 @@ function duplicateCard() {
   // Open the clone for immediate editing (re-entering its project if we came
   // from the "전체" board, since closeModal switched back to it).
   setTimeout(
-    () => openModal(clone.id, returnToAll ? { projectId: projId, returnToAll: true } : undefined),
+    () => openModal(clone.id, returnTo ? { projectId: projId, returnTo } : undefined),
     50,
   );
 }
@@ -265,6 +272,121 @@ export function flashMsg(text) {
   el.classList.add('show');
   clearTimeout(flashMsg._t);
   flashMsg._t = setTimeout(() => el.classList.remove('show'), 1800);
+}
+
+// ── Backlinks (cards whose notes reference this one via [[title]]) ────────────
+function renderBacklinks(cardId, title) {
+  const field = document.getElementById('mBacklinksField');
+  const list  = document.getElementById('mBacklinks');
+  const refs  = backlinksTo(title, cardId);
+  if (!refs.length) { field.hidden = true; list.innerHTML = ''; return; }
+  field.hidden = false;
+  document.getElementById('mBacklinksCount').textContent = refs.length;
+  list.innerHTML = '';
+  refs.forEach(({ card, project }) => {
+    const row = document.createElement('div');
+    row.className = 'backlink-row';
+    row.style.setProperty('--ph', projectHue(project.id));
+    row.innerHTML =
+      `<span class="backlink-proj">${escHtml(project.name)}</span>` +
+      `<span class="backlink-title">${escHtml(card.title)}</span>`;
+    row.addEventListener('click', () =>
+      openModal(card.id, { projectId: project.id, returnTo: m.returnTo }));
+    list.appendChild(row);
+  });
+}
+
+// ── [[wikilink]] click navigation (in rendered markdown previews) ─────────────
+function onWikiClick(e) {
+  const a = e.target.closest('.wikilink');
+  if (!a) return;
+  e.preventDefault();
+  const found = findCardByTitle(a.dataset.wikilink);
+  if (!found) { flashMsg('연결된 카드가 없어요'); return; }
+  openModal(found.card.id, { projectId: found.project.id, returnTo: m.returnTo });
+}
+function onWikiClickNp(e) {
+  const a = e.target.closest('.wikilink');
+  if (!a) return;
+  e.preventDefault();
+  const found = findCardByTitle(a.dataset.wikilink);
+  if (!found) { flashMsg('연결된 카드가 없어요'); return; }
+  const returnTo = np.returnTo;
+  document.getElementById('notePageOverlay').classList.remove('open');
+  np.cardId = null; np.fromModal = false; np.returnTo = null;
+  openModal(found.card.id, { projectId: found.project.id, returnTo });
+}
+
+// ── [[wikilink]] autocomplete in note editors ────────────────────────────────
+let acEl = null;          // shared dropdown element
+let ac = null;            // { ta, items, sel, start }
+
+function ensureAcEl() {
+  if (acEl) return acEl;
+  acEl = document.createElement('div');
+  acEl.className = 'wiki-ac';
+  acEl.hidden = true;
+  document.body.appendChild(acEl);
+  return acEl;
+}
+
+function attachWikiAutocomplete(ta) {
+  if (!ta) return;
+  ta.addEventListener('input', () => updateAc(ta));
+  ta.addEventListener('keydown', (e) => acKeydown(e, ta), true); // capture: beat Enter
+  ta.addEventListener('blur', () => setTimeout(hideAc, 120));
+}
+
+function updateAc(ta) {
+  const pos = ta.selectionStart;
+  const mm = ta.value.slice(0, pos).match(/\[\[([^\]\n]*)$/);
+  if (!mm) { hideAc(); return; }
+  const query = mm[1].toLowerCase();
+  const cands = allCards()
+    .filter(e => e.card.title.toLowerCase().includes(query))
+    .slice(0, 8);
+  if (!cands.length) { hideAc(); return; }
+  ac = { ta, items: cands, sel: 0, start: pos - mm[1].length };
+  showAc(ta);
+}
+
+function showAc(ta) {
+  const el = ensureAcEl();
+  el.innerHTML = ac.items.map((e, i) =>
+    `<div class="wiki-ac-row${i === ac.sel ? ' sel' : ''}" data-i="${i}">` +
+    `<span class="wiki-ac-title">${escHtml(e.card.title)}</span>` +
+    `<span class="wiki-ac-proj">${escHtml(e.project.name)}</span></div>`).join('');
+  const r = ta.getBoundingClientRect();
+  el.style.left = r.left + 'px';
+  el.style.top  = (r.bottom + 4) + 'px';
+  el.style.width = Math.min(r.width, 360) + 'px';
+  el.hidden = false;
+  el.querySelectorAll('.wiki-ac-row').forEach(row =>
+    row.addEventListener('mousedown', (ev) => { ev.preventDefault(); pickAc(+row.dataset.i); }));
+}
+
+function hideAc() { if (acEl) acEl.hidden = true; ac = null; }
+
+function acKeydown(e, ta) {
+  if (!ac || !acEl || acEl.hidden || ac.ta !== ta) return;
+  if (e.key === 'ArrowDown')       { e.preventDefault(); ac.sel = (ac.sel + 1) % ac.items.length; showAc(ta); }
+  else if (e.key === 'ArrowUp')    { e.preventDefault(); ac.sel = (ac.sel - 1 + ac.items.length) % ac.items.length; showAc(ta); }
+  else if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); pickAc(ac.sel); }
+  else if (e.key === 'Escape')     { e.preventDefault(); hideAc(); }
+}
+
+function pickAc(i) {
+  if (!ac) return;
+  const ta = ac.ta;
+  const title = ac.items[i].card.title;
+  const pos = ta.selectionStart;
+  const v = ta.value;
+  ta.value = v.slice(0, ac.start) + title + ']]' + v.slice(pos);
+  const caret = ac.start + title.length + 2;
+  ta.selectionStart = ta.selectionEnd = caret;
+  hideAc();
+  ta.focus();
+  ta.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
 // ── Notes preview toggle + image paste ──────────────────────────────────────
@@ -447,6 +569,8 @@ export function initModal() {
   const desc = document.getElementById('mDesc');
   desc.addEventListener('input', e => autoResize(e.target));
   desc.addEventListener('paste', handlePaste);
+  attachWikiAutocomplete(desc);
+  document.getElementById('notesPreview').addEventListener('click', onWikiClick);
 
   const clInput = document.getElementById('checklistInput');
 
@@ -488,12 +612,12 @@ export function initModal() {
       const form = readForm();
       if (form.title) Object.assign(result.card, form);
     }
-    // Hand the 전체-view origin to the note page; clear it on the modal so the
-    // upcoming closeModal() just hides the modal without switching the view.
-    const returnToAll = m.returnToAll;
-    m.returnToAll = false;
+    // Hand the cross-project origin to the note page; clear it on the modal so
+    // the upcoming closeModal() just hides the modal without switching views.
+    const returnTo = m.returnTo;
+    m.returnTo = null;
     openNotePage(m.cardId, true);
-    np.returnToAll = returnToAll;
+    np.returnTo = returnTo;
     closeModal();
   });
 }
@@ -506,7 +630,7 @@ export function openNotePage(cardId, fromModal = false) {
 
   np.cardId    = cardId;
   np.fromModal = fromModal;
-  np.returnToAll = false;   // notesExpand sets this after, for 전체-view origin
+  np.returnTo  = null;   // notesExpand sets this after, for cross-project origin
   np.priority  = fromModal ? m.priority : card.priority;
   np.tags      = fromModal ? [...m.tags] : [...(card.tags || [])];
   np.viewMode  = 'edit';
@@ -562,6 +686,7 @@ function saveNotePageData() {
   card.due      = due;
   card.priority = np.priority;
   card.tags     = [...np.tags];
+  touchCard(card);
 
   if (newColId !== srcCol.id) {
     srcCol.cards = srcCol.cards.filter(c => c.id !== np.cardId);
@@ -574,20 +699,20 @@ function saveNotePageData() {
 }
 
 function closeNotePage() {
-  const cardId     = np.cardId;
-  const fromModal  = np.fromModal;
-  const returnToAll = np.returnToAll;
+  const cardId    = np.cardId;
+  const fromModal = np.fromModal;
+  const returnTo  = np.returnTo;
   document.getElementById('notePageOverlay').classList.remove('open');
   np.cardId    = null;
   np.fromModal = false;
-  np.returnToAll = false;
+  np.returnTo  = null;
 
   if (fromModal && cardId) {
     // Re-open modal so user can continue editing other fields (carrying the
-    // 전체-view origin so its eventual close returns there).
-    openModal(cardId, returnToAll ? { returnToAll: true } : undefined);
-  } else if (returnToAll && state.activeProjectId !== ALL_PROJECT_ID) {
-    state.activeProjectId = ALL_PROJECT_ID;
+    // cross-project origin so its eventual close returns there).
+    openModal(cardId, returnTo ? { returnTo } : undefined);
+  } else if (returnTo && state.activeProjectId !== returnTo) {
+    state.activeProjectId = returnTo;
     refreshAll();
   }
 }
@@ -689,6 +814,8 @@ export function initNotePage() {
 
   // Image paste
   document.getElementById('npEditor').addEventListener('paste', handlePaste);
+  attachWikiAutocomplete(document.getElementById('npEditor'));
+  document.getElementById('npPreviewPane').addEventListener('click', onWikiClickNp);
 
   // Live preview in split mode
   document.getElementById('npEditor').addEventListener('input', () => {

@@ -11,6 +11,8 @@ import { initAuth, onUserChange } from './auth.js';
 import { subscribeUserState } from './sync.js';
 import { initNotifications } from './notifications.js';
 import { initCalendar } from './calendar.js';
+import { initPalette, openPalette } from './palette.js';
+import { initFilterBar } from './filterbar.js';
 
 // ── Wire global events ──────────────────────────────────────────────────────
 document.getElementById('addColNavBtn').addEventListener('click', addColumn);
@@ -27,6 +29,13 @@ document.querySelectorAll('.vt-btn').forEach(b => {
 });
 
 document.addEventListener('keydown', e => {
+  // ⌘K / Ctrl+K — command palette (works even while typing in a field).
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+    e.preventDefault();
+    openPalette();
+    return;
+  }
+
   if (e.key === 'Escape') {
     if (document.getElementById('notePageOverlay')?.classList.contains('open')) return;
     closeModal();
@@ -60,6 +69,8 @@ initAuth();
 initSidebarToggle();
 initNotifications();
 initCalendar();
+initPalette();
+initFilterBar();
 
 // ── Sidebar collapse toggle ─────────────────────────────────────────────────
 function initSidebarToggle() {
@@ -80,9 +91,12 @@ function initSidebarToggle() {
   document.getElementById('sidebarOpenBtn').addEventListener('click', () => apply(false));
   document.getElementById('sidebarBackdrop').addEventListener('click', () => apply(true));
 
-  // On mobile, picking a project should auto-close the sidebar.
+  // On mobile, picking a project or view should auto-close the sidebar.
   document.getElementById('projectList').addEventListener('click', (e) => {
     if (isMobile() && e.target.closest('.project-item')) apply(true);
+  });
+  document.getElementById('viewList').addEventListener('click', (e) => {
+    if (isMobile() && e.target.closest('.view-item')) apply(true);
   });
 }
 
